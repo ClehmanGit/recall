@@ -1,0 +1,34 @@
+name: Something isn't working
+description: Report a problem with Recall
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please leave out personal file names, folder paths and chat text.
+        For a security problem, use **Report a vulnerability** on the Security tab instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Recall version
+      description: Shown at the bottom of Settings.
+      placeholder: "2.1.1"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: The last lines of %LOCALAPPDATA%\Recall\recall.log. Check them for file names or paths you'd rather not share.
+      render: text

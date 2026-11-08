@@ -1,0 +1,10 @@
+name: Idea
+description: Suggest a change or a new feature
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Recall to do?
+      description: Describe the situation it would help with.
+    validations:
+      required: true

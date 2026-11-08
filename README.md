@@ -1,151 +1,105 @@
-# Recall v2
+<p align="center">
+  <img src="assets/mascot.png" alt="" width="96" height="96">
+</p>
 
-Local semantic search across AI chats and your files. One search box, one ranked list, one card per thing. Nothing leaves the machine.
+<h1 align="center">Recall</h1>
 
-```
-recall/
-├── core/          recall-core: ingest, rules, embed, index, search. No UI dependency.
-│   └── src/bin/   probe: headless pipeline check
-├── src-tauri/     Tauri 2 shell (window, commands, bundling, models/)
-├── src/           frontend: vanilla TypeScript + Vite
-│   └── views/     search, home, getting started, gallery and timeline, quick view, settings
-├── site/          the one-page download website
-├── scripts/       fetch-model.mjs, update-installed.ps1
-└── assets/        mascot
-```
+<p align="center">
+  Search your files and your Claude, ChatGPT and Gemini chats in one place, by what they say.<br>
+  Runs on your computer. Nothing is uploaded.
+</p>
 
-## Shipping it
+<p align="center">
+  <a href="https://github.com/ClehmanGit/recall/releases/latest/download/Recall-Setup.exe"><b>Download for Windows</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://clehmangit.github.io/recall/">Website</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">What's new</a>
+</p>
 
-Nobody who installs Recall builds it. `.github/workflows/release.yml` builds the installer on GitHub's Windows runner and attaches it to a Release whenever you push a version tag:
+<p align="center">
+  <img src="docs/images/search.png" alt="Recall showing search results from a Claude chat and a PDF" width="800">
+</p>
 
-```
-git tag v2.1.1
-git push origin v2.1.1
-```
+## What it does
 
-About fifteen minutes later the Release page has the installer twice, `Recall_<version>_x64-setup.exe` and the same file as `Recall-Setup.exe` (the fixed name the website links to), plus `SHA256SUMS.txt` with its fingerprint. Bump the version in `package.json`, `core/Cargo.toml`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` before tagging. The installer runs per-user, no admin prompt.
+You add the folders you care about and sign in to the chat apps you use. Recall reads them and keeps an index on your computer. Then you type what you remember, in your own words, and it finds the file or the chat and shows the passage that matches.
 
-Every action in the workflows is pinned to a full commit and the model to a revision and SHA-256, so nothing upstream can quietly change what goes into the installer; Dependabot (`.github/dependabot.yml`) proposes updates as pull requests.
+- **Search by meaning, not only exact words.** "the quote for redoing the kitchen" finds *Kitchen remodel quote.pdf* even if the PDF never uses the word "redoing". Exact words and file names work too.
+- **Files and chats in one list.** One result per file or conversation, with its best passages and where they are: page 3, turn 12, line 44.
+- **Stays current.** New and changed files are picked up as you save them. Chats are backed up every 15 minutes while Recall is running.
+- **Leaves your files alone.** Recall never moves, changes or deletes them.
 
-Code signing is not set up. To remove the SmartScreen warning, get a signing identity (Microsoft's Trusted Signing is the inexpensive route) and set `bundle.windows.signCommand` in `tauri.conf.json` to its signing command, with the credentials as repository secrets.
+## Install
 
-## The download page
+1. [Download Recall-Setup.exe](https://github.com/ClehmanGit/recall/releases/latest/download/Recall-Setup.exe) (Windows 10 or 11, 64-bit, about 34 MB).
+2. Run it. It installs for your Windows account only, with no administrator prompt.
+3. Windows may say it "protected your PC", because the installer is not code-signed yet. Click **More info**, then **Run anyway**.
 
-`site/` is one page that fits on one screen: what Recall does, the download button and four privacy points, over a slow drift of files and chats (`site/drift.js`). The demo search types itself and the page scales to fit the window (`site/site.js`).
-
-It uses nothing from anywhere else: fonts, images and scripts are in `site/`, and a Content-Security-Policy in the page blocks everything else. No cookies, no analytics. The download button goes to `releases/latest/download/Recall-Setup.exe`, so a new release needs no change to the page. The version and installer size in its text are typed in; update them with a release.
-
-`.github/workflows/site.yml` swaps `REPLACE_ME/recall` for the repository's name and publishes `site/` to GitHub Pages, which serves it over HTTPS (enable Pages → Source: GitHub Actions in the repo settings once). To look at it locally: `python -m http.server 4321 --directory site`.
-
-## Windows setup (for building it yourself)
-
-Prerequisites, once:
-
-1. Rust: https://rustup.rs (MSVC toolchain; say yes to Visual Studio Build Tools, "Desktop development with C++").
-2. Node 20+: https://nodejs.org
-3. WebView2 is already on Windows 10/11.
-
-Then:
+To check that your download is the file GitHub built, compare its fingerprint with `SHA256SUMS.txt` on the [release page](https://github.com/ClehmanGit/recall/releases/latest):
 
 ```powershell
-npm install
-npm run model      # bge-small-en-v1.5 int8, ~33 MB, into src-tauri/models/ — ships inside the installer
-npm run dev        # builds the Rust side on first run (several minutes), then opens the window
+Get-FileHash .\Recall-Setup.exe -Algorithm SHA256
 ```
 
-`npm run build` produces the installer under `target/release/bundle/nsis/`. The model folder is bundled as a resource, so the installer is self-contained; no download on first launch.
+## Getting started
 
-To ship a feedback endpoint: `$env:RECALL_FEEDBACK_URL="https://your.endpoint/feedback"; npm run build`. Without it the feedback button is hidden.
+Recall opens with a short guide. In brief:
 
-### Updating your own installed copy
+1. **Add folders.** Click **+ Add sources** and pick folders such as Documents or Downloads. Indexing starts right away. The computer works harder until it finishes, and search works the whole time.
+2. **Connect chat apps (optional).** Under **+ Add sources**, pick Claude, ChatGPT or Gemini. A window opens on that app's own website. Sign in as usual, and Recall copies your chats: recent and starred ones first, older ones while the computer is idle.
+3. **Search.** Press <kbd>Ctrl</kbd>+<kbd>K</kbd> from anywhere in Recall and type.
 
-`scripts/update-installed.ps1` builds the app, closes the running Recall, swaps in the new `recall.exe` and starts it again. Your library and settings are untouched; no reinstall.
+Click a result to open the file at the right page, or the chat in your browser. Closing the window keeps Recall running in the system tray so it stays current. To stop it, right-click the tray icon and choose **Quit Recall**.
 
-### UI in a plain browser
+### What it reads
 
-`npm run web` serves the frontend on sample data (`src/mock.ts` stands in for the Tauri commands; production builds leave it out). Useful for motion and copy changes without a Rust build. Add `?empty` to the address to see an empty library and the Getting started guide.
+| Kind | Files |
+| --- | --- |
+| Documents | PDF, Word (`.docx`), plain text, Markdown, CSV |
+| Spreadsheets | Excel (`.xlsx`, `.xls`) |
+| Code | Common source and config files: `.py`, `.js`, `.ts`, `.rs`, `.go`, `.java`, `.cs`, `.json`, `.yaml` and more |
+| Pictures | PNG, JPG, GIF, WebP and more, found by file name |
+| Chats | Claude, ChatGPT, Gemini |
 
-### Headless check without the window
+By default Recall skips program folders, code projects, installers and archives, video and audio, and pictures whose names are too short to search by (such as `IMG_0412.jpg`). Change this in **Settings › What to skip**. To drop a single result, hover over it and click **Hide**. **Settings › Hidden items** brings it back.
 
-```powershell
-cd src-tauri
-cargo run -p recall-core --bin probe -- index C:\Users\you\Downloads
-cargo run -p recall-core --bin probe -- search "that paper about vents"
-cargo run -p recall-core --bin probe -- status
-```
+## Privacy
 
-The probe loads the model from `./models/`, which is why it runs from `src-tauri`. It uses the app's real data folder.
+- **Nothing leaves your computer.** The index is stored in your Windows user folder. Recall has no account, no ads, no analytics and no telemetry. The official download makes no network requests of its own.
+- **Recall never sees your passwords.** You sign in to Claude, ChatGPT and Gemini on their own websites, in a window Recall opens. Each window talks only to its own site, the way a browser would.
+- **It reads only what you choose:** the folders you add and the chat apps you sign in to.
+- **You can remove all of it.** See [Your data](#your-data).
 
-## Chats: sign in inside the app
+How each of these is enforced is described in [How Recall works](docs/how-it-works.md#security-model).
 
-`+ Add sources › Claude / ChatGPT / Gemini`, Settings › Chat apps › Connect, or the Getting started guide opens a `WebviewWindow` labelled `connect-<platform>` on the platform's own site, with `src-tauri/connect/reader.js` as its initialization script. Recall never sees the password: the person signs in to the site itself.
+## Your data
 
-The script notices sign-in on its own, checking every 3 seconds for ten minutes, because some sign-ins (Claude's Google pop-up, a typed code) finish without a page load. Then the window hides, Recall comes forward and says what happens next, and the backup starts:
+Recall keeps everything in one folder, `%LOCALAPPDATA%\Recall`.
 
-- **Quick backup** first: recent and starred chats. It runs again every fifteen minutes.
-- **Full backup** of older chats, 50 at a time, only while the computer has been idle for five minutes or between 1 and 6 am, until every chat is in.
+| To | Do this |
+| --- | --- |
+| See how much space it uses | **Settings › Storage** |
+| Start the index over | **Settings › Storage › Rebuild index**. Your folders and settings are kept. |
+| Stop copying one chat app | **Settings › Chat apps › Disconnect**. This signs you out of that app inside Recall. |
+| Remove Recall | **Windows Settings › Apps › Installed apps › Recall › Uninstall**. Tick **Delete the application data** to remove the chat sign-ins too. |
+| Remove the index too | After uninstalling, delete the `%LOCALAPPDATA%\Recall` folder. |
 
-The reader asks the app which chats it already has and when each changed (`connect_known`), so only new or changed chats are fetched, and reports progress (`connect_progress`) for the line under each app in Settings. If a site asks Recall to slow down for longer than 15 seconds, the run stops and that app pauses for 30 minutes. Batches arrive through `connect_ingest` and the result through `connect_report`; the `connect` capability exposes only these four reader commands, to those sites only, and each command answers only its own platform's window. Chats from the page are checked before they are stored: the app sets the platform and builds each link itself, ids must be plain, and titles, messages and batches are capped. The window goes only to https pages and cannot download files. Disconnect deletes that app's own sign-in cookies and nothing else. Connection state lives in the `connections` setting; the schedule is at the top of `src-tauri/src/connect.rs`.
+## Known limitations
 
-Every app command is listed in `build.rs` so Tauri generates `allow-<command>` permissions; `capabilities/default.json` grants the main window its commands, `capabilities/connect.json` grants the four reader commands to the sign-in windows.
+- Windows only.
+- Text inside pictures and scanned PDFs is not read yet. Pictures are found by name.
+- Chat export files (the ZIP each chat app can email you) can't be imported yet. Use sign-in instead.
+- The index on disk is not encrypted. It is as private as your Windows account.
+- The installer is not code-signed, so Windows shows a warning the first time.
 
-## How it indexes
+## Questions and problems
 
-Every item carries two axes that never get folded into the embedding:
+[Open an issue](https://github.com/ClehmanGit/recall/issues). Please leave out personal file names and chat text. To report a security problem privately, see [SECURITY.md](SECURITY.md).
 
-- **kind**: chat, pdf, document, spreadsheet, code, image, text
-- **source**: claude, gemini, chatgpt, or the folder you added
+## For developers
 
-On Windows a file is identified by a hash of its path, creation time and attributes, so a rename or move makes a new item and the next sweep drops the old one; elsewhere by device and inode. A file whose content hash has not changed is not read again; a changed one is re-chunked and re-embedded. Chats are identified by platform and conversation id.
+Recall is a [Tauri 2](https://tauri.app) app: a Rust engine (`core/`) with a TypeScript front end (`src/`). Search combines SQLite full-text search with a small embedding model ([bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)) that runs on your computer.
 
-Chunks keep a **locator** (`p.3`, `L44`, `turn 12`, `Sheet1`) so a card can show where a hit lives before you open it, and an **anchor** for the deep link on click. Chat and document chunks keep their markdown; the card renders headings, bold and lists.
-
-Search is hybrid: 0.72 vector cosine + 0.20 FTS5 keyword rank + 0.08 recency, grouped per item so one long chat can't flood the list, plus up to 0.6 when the item's name holds the query's words (a quarter of that for half of them). Vector similarity is rescaled from the model's own range (0.45 counts as nothing, 0.80 as a strong match), so noise cannot outweigh a keyword or name match. Each passage is embedded together with its item's name, so a file or chat is found by what it is called even when its text never says it. Weights are constants at the top of `core/src/search.rs`. While the model is still loading, search is keyword-only. Once it loads, a backfill embeds any stored passage that has no vector yet, a slice at a time behind other work, so nothing is read or downloaded again.
-
-### Rules
-
-Settings › What to skip is a set of switches, saved as they change and applied identically in the sweep and the watcher (`core/src/rules.rs`): program and build folders, code projects (any folder with `.git`, `package.json`, `Cargo.toml` and the like; on by default), pictures with no text (on by default), hidden files, installers and archives, video and audio, a size cap, folders picked to skip, file types to include, and following shortcuts. Each kind also has a hard size cap, whatever the setting (`extract::hard_cap`). The presets expand to concrete folder names and extensions in `rules.rs`. A line under the switches shows how many files the current settings keep and skip.
-
-Each sweep also prunes: anything in a folder the rules now skip, anything deleted, and duplicates of the same file leave the index. A folder on an unplugged drive is left alone.
-
-### Excluding one item
-
-Hover a result, press Hide. The item leaves the index, its vectors with it, and is recorded in `excluded` by identity; the file is not touched. On Windows, renaming or moving the file gives it a new identity, so it comes back. Undo is on the toast, and Settings › Hidden items lists everything with Show again. The menu's second row opens What to skip with that file's folder added to the skip list.
-
-### Indexing
-
-Starts the moment a source is added. The first time, a notice explains that CPU use is high while it runs and returns to normal when it finishes; after that, a toast. Progress shows in the sidebar footer (`done / queued`, current file) and a toast marks completion. Search runs throughout. Chats go ahead of files in the queue. A PDF, Word or Excel file that crashes, exhausts or hangs its reader is remembered by content hash and skipped until it changes, so one bad file cannot stop indexing or crash Recall on every start; Word and Excel files that would unpack past 1 GB are refused outright.
-
-Closing the window keeps Recall running in the tray so folders and chats stay current; Quit is on the tray icon. Opening Recall again brings the running copy forward instead of starting a second one.
-
-## Model
-
-`src-tauri/models/model.json` names the model, its dimension, pooling (`cls` or `mean`) and query prefix; the engine reads it at boot and opens `vectors-<dim>-f16.usearch` (half-precision vectors). `npm run model` fetches bge-small-en-v1.5 from a fixed revision and checks each file's SHA-256 (`scripts/fetch-model.mjs`); a different model needs a new revision, new hashes, and Settings › Storage › Rebuild index.
-
-## Network
-
-Recall itself sends nothing anywhere and listens on no port. The sign-in windows talk to the chat sites the person connected, as a browser would. Fonts are bundled. Feedback, when a build has an endpoint, sends only on Send and carries only the text typed plus the app version and OS name (`core/src/feedback.rs`). No identifiers, no usage data, no telemetry from ONNX Runtime (pyke builds have it off).
-
-## What the window may touch
-
-The main window holds no file permissions of its own. Thumbnails and quick view read files through the asset protocol, whose scope starts empty and holds only the folders turned on in Settings. Open and Show in folder name an item by id (`src-tauri/src/open.rs`); the app opens it only if it is a supported file inside a chosen folder, or a chat link on claude.ai, chatgpt.com or gemini.google.com. Code and script files open with their Edit action (Notepad unless the person picked an editor), never to run.
-
-## Motion
-
-One curve (`--ease`), one tempo band (140–260 ms), defined once at the top of `src/style.css`. Cards rise with a 30 ms stagger on a new query only; same-query refreshes stay still. Hits expand in place. Menus, dropdowns and dialogs fade with a small pop; dialogs use `@starting-style` so the close fades too. Everything is off under `prefers-reduced-motion`.
-
-## Data
-
-`%LOCALAPPDATA%\Recall\`
-- `recall.sqlite` — items, chunks, FTS index, sources, rules, exclusions, settings (`secure_delete` on, so deleted text is overwritten)
-- `vectors-384-f16.usearch` — HNSW index of half-precision vectors, keyed by chunk id
-- `recall.log`: what Recall did, for troubleshooting; starts over past 2 MB
-
-Settings › Storage shows sizes; Rebuild index drops items, chunks and vectors and re-sweeps, keeping sources, rules and exclusions.
-
-## Not done yet
-
-- Importing a chat export file (a ZIP downloaded from a chat app) is not built.
-- The installer is not code-signed, so Windows shows a SmartScreen warning ("More info", then "Run anyway").
-- Text inside pictures is not read; a picture is found by its name.
-- The index on disk is not encrypted; it is as private as the Windows account it lives in.
+- [Development](docs/development.md): building, testing and releasing
+- [How Recall works](docs/how-it-works.md): indexing, search, chat backup and the security model

@@ -62,7 +62,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Recall ${{ github.ref_name }}"
-          releaseBody: "Download Recall-Setup.exe below and run it. SHA256SUMS.txt holds its fingerprint."
+          releaseBody: "Download Recall-Setup.exe below and run it."
           releaseDraft: false
           prerelease: false
           args: --bundles nsis
@@ -81,3 +81,20 @@ jobs:
           $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()
           "$hash  Recall-Setup.exe" | Out-File "$env:RUNNER_TEMP/SHA256SUMS.txt" -Encoding ascii
           gh release upload "$env:TAG" $out "$env:RUNNER_TEMP/SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
+
+      # The release notes are this version's section of CHANGELOG.md, under a
+      # line on how to install. A tag with no changelog entry keeps the line alone.
+      - name: Write the release notes from CHANGELOG.md
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = $env:TAG.TrimStart("v")
+          $section = @(); $inside = $false
+          foreach ($line in Get-Content CHANGELOG.md) {
+            if ($line -match '^## ') { $inside = $line -match ('^## ' + [regex]::Escape($version) + '( |$)'); continue }
+            if ($inside) { $section += ($line -replace '^### ', '## ') }
+          }
+          $intro = "**Download [Recall-Setup.exe](https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG/Recall-Setup.exe)** and run it. Windows 10 or 11, 64-bit. If Windows says it protected your PC, click **More info**, then **Run anyway** (the installer is not code-signed yet). ``SHA256SUMS.txt`` holds the installer's fingerprint."
+          (@($intro, "") + $section) -join "`n" | Out-File "$env:RUNNER_TEMP/notes.md" -Encoding utf8
+          gh release edit "$env:TAG" --notes-file "$env:RUNNER_TEMP/notes.md" --repo "$env:GITHUB_REPOSITORY"
