@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Everything this page uses comes from this site: no fonts, scripts, trackers or cookies from anyone else. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Recall · Find what you saved</title>
+<meta name="description" content="Recall indexes your files and AI conversations locally, allowing you to search across all of them at once by what they say. Nothing leaves your computer. Free for Windows.">
+<meta name="theme-color" content="#f6f3ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17150f" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="./assets/owl.png">
+<link rel="preload" href="./fonts/source-serif-4.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="./site.css?v=17">
+<script src="./drift.js?v=17" defer></script>
+<script src="./site.js?v=17" defer></script>
+</head>
+<body>
+<div class="drift" id="drift" aria-hidden="true"></div>
+<div class="veil" aria-hidden="true"></div>
+<div class="page">
+  <header class="top">
+    <a class="brand" href="./"><img src="./assets/owl.png" alt="" width="28" height="28">Recall</a>
+  </header>
+
+  <main class="hero">
+    <div class="pitch">
+      <h1>Find the thing you <em>know</em> you saved.</h1>
+      <p class="lede">Recall indexes your files and AI conversations locally, allowing you to search across all of them at once by what they say, not just their names. <strong>Nothing leaves your computer.</strong></p>
+      <div class="get">
+        <a class="dl" href="https://github.com/REPLACE_ME/recall/releases/latest/download/Recall-Setup.exe">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M6 11l6 6 6-6M4 21h16"/></svg>
+          <span class="dl-text"><span class="dl-label">Download for Windows</span><span class="dl-meta">Free · Windows 10 or 11 · 34 MB</span></span>
+        </a>
+      </div>
+    </div>
+
+    <div class="demo" aria-hidden="true">
+      <div class="owl"><img src="./assets/owl.png" alt="" width="120" height="120"></div>
+      <div class="window">
+        <div class="bar">
+          <span class="wt"><img src="./assets/owl.png" alt="" width="14" height="14">Recall</span>
+          <span class="wc"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></span>
+        </div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+          <span id="typed">notes on the kitchen quote</span><i class="caret"></i>
+        </div>
+        <ul class="results">
+          <li>
+            <svg class="ficon pdf" aria-hidden="true" viewBox="0 0 28 34"><path class="page" d="M4.5 1h13.2L27 10.3V30a3 3 0 0 1-3 3H4.5a3 3 0 0 1-3-3V4a3 3 0 0 1 3-3z"/><path class="fold" d="M17.7 1v6.3a3 3 0 0 0 3 3H27z"/><text x="14.2" y="26.2">PDF</text></svg>
+            <div><b>Kitchen remodel quote, Hartley.pdf</b><span>…cabinets and install, <mark>quote valid for 30 days</mark> from…</span></div>
+          </li>
+          <li>
+            <span class="chatmark"><img src="./assets/claude.svg" alt=""></span>
+            <div><b>Comparing the two kitchen quotes</b><span>…the second one leaves out <mark>countertop templating</mark>, so…</span></div>
+          </li>
+          <li>
+            <svg class="ficon doc" aria-hidden="true" viewBox="0 0 28 34"><path class="page" d="M4.5 1h13.2L27 10.3V30a3 3 0 0 1-3 3H4.5a3 3 0 0 1-3-3V4a3 3 0 0 1 3-3z"/><path class="fold" d="M17.7 1v6.3a3 3 0 0 0 3 3H27z"/><text x="14.2" y="26.2">DOC</text></svg>
+            <div><b>House to-do list.docx</b><span>…call Hartley back about the <mark>kitchen quote</mark> by Friday…</span></div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <section class="promises" aria-label="Privacy">
+    <div class="promise p-home">
+      <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><rect class="fill" x="2.8" y="3.8" width="18.4" height="12.4" rx="2.6"/><rect x="2.8" y="3.8" width="18.4" height="12.4" rx="2.6"/><path d="M9 20.2h6M12 16.2v4"/><path d="M9.2 10.1l2 2 3.8-3.9"/></svg></span>
+      <h2>Stays on your computer</h2>
+      <p>Recall reads and searches only what you allow it, and never uploads your content anywhere.</p>
+    </div>
+    <div class="promise p-key">
+      <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><rect class="fill" x="4.8" y="10.2" width="14.4" height="10" rx="2.6"/><rect x="4.8" y="10.2" width="14.4" height="10" rx="2.6"/><path d="M8.2 10.2V7.6a3.8 3.8 0 0 1 7.6 0v2.6"/><circle class="dot" cx="12" cy="14.4" r="1.35"/><path d="M12 15.6v1.8"/></svg></span>
+      <h2>Never sees a password</h2>
+      <p>You sign in directly with Claude, ChatGPT or Gemini. Your password goes only to them and is never seen or stored by Recall.</p>
+    </div>
+    <div class="promise p-eye">
+      <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><path class="fill" d="M2.6 12S6 5.6 12 5.6 21.4 12 21.4 12 18 18.4 12 18.4 2.6 12 2.6 12z"/><path d="M2.6 12S6 5.6 12 5.6 21.4 12 21.4 12 18 18.4 12 18.4 2.6 12 2.6 12z"/><circle cx="12" cy="12" r="2.8"/><path class="halo" d="M4.5 4.5l15 15"/><path d="M4.5 4.5l15 15"/></svg></span>
+      <h2>No account, no tracking</h2>
+      <p>No sign-up, no ads, no usage data. Recall is completely private and yours to own.</p>
+    </div>
+    <div class="promise p-file">
+      <span class="ic"><svg aria-hidden="true" viewBox="0 0 24 24"><path class="fill" d="M3.4 7.4a2.4 2.4 0 0 1 2.4-2.4h3.7l2.1 2.1h6.6a2.4 2.4 0 0 1 2.4 2.4v7.7a2.4 2.4 0 0 1-2.4 2.4H5.8a2.4 2.4 0 0 1-2.4-2.4z"/><path d="M3.4 7.4a2.4 2.4 0 0 1 2.4-2.4h3.7l2.1 2.1h6.6a2.4 2.4 0 0 1 2.4 2.4v7.7a2.4 2.4 0 0 1-2.4 2.4H5.8a2.4 2.4 0 0 1-2.4-2.4z"/><path d="M9.3 13.1l1.9 1.9 3.6-3.7"/></svg></span>
+      <h2>Your files stay put</h2>
+      <p>Recall never moves, changes or deletes your files. It keeps its own data in one folder.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>Version 2.1.0</span>
+    <span class="works">Works with <img src="./assets/claude.svg" alt="">Claude, <img src="./assets/openai.svg" alt="">ChatGPT and <img src="./assets/gemini.svg" alt="">Gemini</span>
+    <a class="foot-link" href="https://github.com/REPLACE_ME/recall" rel="noopener">Source code</a>
+  </footer>
+</div>
+</body>
+</html>

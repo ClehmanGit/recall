@@ -1,0 +1,51 @@
+[package]
+name = "recall-core"
+version = "2.1.0"
+edition = "2021"
+description = "Recall engine: ingest, embed, index, search. No UI dependency."
+
+[lib]
+name = "recall_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "probe"
+path = "src/bin/probe.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+axum = "0.7"
+notify = "7"
+notify-debouncer-full = "0.4"
+walkdir = "2"
+blake3 = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+dirs = "5"
+globset = "0.4"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+# embeddings
+ort = { version = "2.0.0-rc.9", default-features = false, features = ["std"] }
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+usearch = "2"
+
+# extraction
+pdf-extract = "0.7"
+docx-rs = "0.4"
+calamine = "0.28"
+
+[features]
+default = ["ort-download"]
+# default: fetch a prebuilt onnxruntime at build time
+ort-download = ["ort/download-binaries", "ort/tls-rustls"]
+# alternative: link against an onnxruntime.dll/.so you ship yourself (set ORT_DYLIB_PATH at runtime)
+ort-dynamic = ["ort/load-dynamic"]
+ocr = []
