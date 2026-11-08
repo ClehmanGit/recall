@@ -49,6 +49,34 @@ pub fn ext_of(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// The largest file of each kind Recall will read, whatever the size setting
+/// says: past this a reader can run out of memory, which ends the whole app.
+pub fn hard_cap(path: &Path) -> u64 {
+    const MB: u64 = 1024 * 1024;
+    match ext_of(path).as_str() {
+        "pdf" => 256 * MB,
+        "docx" | "xlsx" => 128 * MB,
+        "xls" => 32 * MB,
+        e if IMAGE_EXT.contains(&e) => u64::MAX, // only the name is read
+        _ => 32 * MB,
+    }
+}
+
+/// A Word or Excel file is a zip. Refuse one that would unpack to far more
+/// than any real document (a zip bomb) before a reader inflates it.
+fn zip_ok(path: &Path) -> Result<()> {
+    const MAX_ENTRIES: usize = 20_000;
+    const MAX_TOTAL: u64 = 1024 * 1024 * 1024;
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path)?).context("open zip")?;
+    anyhow::ensure!(zip.len() <= MAX_ENTRIES, "too many parts ({})", zip.len());
+    let mut total = 0u64;
+    for i in 0..zip.len() {
+        total = total.saturating_add(zip.by_index_raw(i)?.size());
+        anyhow::ensure!(total <= MAX_TOTAL, "unpacks to more than 1 GB");
+    }
+    Ok(())
+}
+
 pub fn extract(path: &Path) -> Result<Extracted> {
     let ext = ext_of(path);
     match ext.as_str() {
@@ -81,6 +109,7 @@ fn pdf(path: &Path) -> Result<Extracted> {
 }
 
 fn docx(path: &Path) -> Result<Extracted> {
+    zip_ok(path)?;
     let bytes = std::fs::read(path)?;
     let doc = docx_rs::read_docx(&bytes).context("read docx")?;
     let mut paras = Vec::new();
@@ -106,7 +135,14 @@ fn docx(path: &Path) -> Result<Extracted> {
     Ok(Extracted { kind: "document", size_label: format!("{words} words"), size_num: words as i64, units })
 }
 
+/// Cells read from one workbook at most; a real sheet has far fewer.
+const MAX_CELLS: usize = 2_000_000;
+
 fn spreadsheet(path: &Path) -> Result<Extracted> {
+    if ext_of(path) == "xlsx" {
+        zip_ok(path)?;
+        return xlsx(path);
+    }
     use calamine::{open_workbook_auto, Reader};
     let mut wb = open_workbook_auto(path).context("open workbook")?;
     let mut units = Vec::new();
@@ -134,6 +170,44 @@ fn spreadsheet(path: &Path) -> Result<Extracted> {
         size_num: rows_total as i64,
         units,
     })
+}
+
+/// Reads an .xlsx cell by cell. Loading a whole sheet sizes a grid from its
+/// first and last cells, so two far-apart cells could ask for billions.
+fn xlsx(path: &Path) -> Result<Extracted> {
+    use calamine::{Reader, Xlsx};
+    let mut wb: Xlsx<_> = calamine::open_workbook(path).context("open workbook")?;
+    let (mut units, mut rows_total, mut cells) = (Vec::new(), 0usize, 0usize);
+    let names = wb.sheet_names().to_vec();
+    for name in &names {
+        let Ok(mut reader) = wb.worksheet_cells_reader(name) else { continue };
+        let (mut lines, mut row, mut current): (Vec<String>, Option<u32>, Vec<String>) = (Vec::new(), None, Vec::new());
+        let flush = |cur: &mut Vec<String>, lines: &mut Vec<String>| {
+            if !cur.is_empty() {
+                lines.push(cur.join(" | "));
+                cur.clear();
+            }
+        };
+        while let Ok(Some(cell)) = reader.next_cell() {
+            cells += 1;
+            anyhow::ensure!(cells <= MAX_CELLS, "more than {MAX_CELLS} cells");
+            let (r, _) = cell.get_position();
+            if row != Some(r) {
+                flush(&mut current, &mut lines);
+                row = Some(r);
+                rows_total += 1;
+            }
+            let v = calamine::Data::from(cell.get_value().clone()).to_string();
+            if !v.trim().is_empty() {
+                current.push(v);
+            }
+        }
+        flush(&mut current, &mut lines);
+        if !lines.is_empty() {
+            units.push(Unit { locator: name.clone(), text: lines.join("\n"), anchor: Some(name.clone()) });
+        }
+    }
+    Ok(Extracted { kind: "spreadsheet", size_label: format!("{rows_total} rows"), size_num: rows_total as i64, units })
 }
 
 fn code(path: &Path) -> Result<Extracted> {

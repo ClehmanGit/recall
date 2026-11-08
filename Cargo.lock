@@ -3845,6 +3845,7 @@ dependencies = [
  "ureq",
  "usearch",
  "walkdir",
+ "zip 4.6.1",
 ]
 
 [[package]]

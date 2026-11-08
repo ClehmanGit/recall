@@ -87,13 +87,20 @@ pub fn start(db: Db, index: VecIndex, model_dir: PathBuf) -> Ingest {
 
     // load the model off the main thread; search degrades to keyword-only until it lands
     {
-        let slot = embedder.clone();
+        let (slot, db, tx) = (embedder.clone(), db.clone(), tx.clone());
         std::thread::Builder::new()
             .name("embedder-load".into())
             .spawn(move || match Embedder::load(&model_dir) {
                 Ok(e) => {
                     info!("embedder ready");
                     *slot.lock() = Some(e);
+                    // files read before this point have no vectors; read them again
+                    // (chats come back with the next backup, see db::chat_versions)
+                    if db::has_unembedded(&db) {
+                        for s in db::list_sources(&db).unwrap_or_default().into_iter().filter(|s| s.enabled) {
+                            let _ = tx.send(Job::SweepSource(s.path));
+                        }
+                    }
                 }
                 Err(e) => warn!("embedder unavailable, keyword search only: {e:#}"),
             })
@@ -106,6 +113,8 @@ pub fn start(db: Db, index: VecIndex, model_dir: PathBuf) -> Ingest {
         let progress = progress.clone();
         std::thread::Builder::new()
             .name("ingest".into())
+            // deeply nested PDFs recurse in the reader; a stack overflow would end the app
+            .stack_size(256 * 1024 * 1024)
             .spawn(move || worker(rx, tx2, db, index, embedder, progress))
             .expect("spawn ingest");
     }
@@ -114,6 +123,11 @@ pub fn start(db: Db, index: VecIndex, model_dir: PathBuf) -> Ingest {
 }
 
 fn worker(rx: Receiver<Job>, tx: Sender<Job>, db: Db, index: VecIndex, embedder: Arc<Mutex<Option<Embedder>>>, progress: Progress) {
+    // a document still marked as being read means the last run died or hung on it
+    if let Some(h) = take_reading_mark(&db) {
+        warn!("the last run stopped while reading a document; it will be skipped until it changes");
+        remember_bad(&db, h);
+    }
     let mut dirty = 0usize;
     // chats go first: every start re-reads the watched folders, which can queue
     // thousands of files, and chats someone just signed in for should not wait
@@ -136,7 +150,12 @@ fn worker(rx: Receiver<Job>, tx: Sender<Job>, db: Db, index: VecIndex, embedder:
         let r = match job {
             Job::File { path, source } => {
                 *progress.current.lock() = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
-                guarded(&path.display().to_string(), || ingest_file(&db, &index, &embedder, &path, &source))
+                let r = guarded(&path.display().to_string(), || ingest_file(&db, &index, &embedder, &path, &source));
+                // still marked: the reader panicked part-way, so never try this version again
+                if let Some(h) = take_reading_mark(&db) {
+                    remember_bad(&db, h);
+                }
+                r
             }
             Job::FileGone { path } => {
                 let ident = file_ident(&path).unwrap_or_default();
@@ -186,6 +205,44 @@ fn worker(rx: Receiver<Job>, tx: Sender<Job>, db: Db, index: VecIndex, embedder:
 fn guarded(what: &str, f: impl FnOnce() -> Result<usize>) -> Result<usize> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
         .unwrap_or_else(|_| Err(anyhow::anyhow!("reader crashed on {what}; skipped")))
+}
+
+// Documents a reader could not get through. Parsers for PDF, Word and Excel
+// can crash, run out of memory or hang on a damaged or hostile file; the
+// first two end the app, and every start would read the same file again.
+// So the content hash is marked before such a read and cleared after; a mark
+// left behind names a file to skip until it changes.
+const READING: &str = "reading_document";
+const BAD: &str = "unreadable_documents";
+
+fn take_reading_mark(db: &Db) -> Option<String> {
+    let h = db::setting_get::<String>(db, READING).ok().flatten()?;
+    let _ = db::setting_del(db, READING);
+    Some(h)
+}
+
+fn remember_bad(db: &Db, hash: String) {
+    let mut bad: Vec<String> = db::setting_get(db, BAD).ok().flatten().unwrap_or_default();
+    if !bad.contains(&hash) {
+        bad.push(hash);
+        let keep = bad.len().saturating_sub(500);
+        bad.drain(..keep);
+        let _ = db::setting_set(db, BAD, &bad);
+    }
+}
+
+fn is_bad(db: &Db, hash: &str) -> bool {
+    db::setting_get::<Vec<String>>(db, BAD).ok().flatten().unwrap_or_default().iter().any(|h| h == hash)
+}
+
+fn risky(kind: &str) -> bool {
+    matches!(kind, "pdf" | "document" | "spreadsheet")
+}
+
+fn hash_file(path: &Path) -> Result<String> {
+    let mut h = blake3::Hasher::new();
+    h.update_reader(std::fs::File::open(path)?)?;
+    Ok(h.finalize().to_hex().to_string())
 }
 
 pub fn load_rules(db: &Db) -> Rules {
@@ -312,16 +369,33 @@ fn ingest_file(
 ) -> Result<usize> {
     let meta = std::fs::metadata(path)?;
     let m = Matcher::new(load_rules(db));
-    if !m.allows_file(path, meta.len(), extract::kind_of(path)) || m.in_code_project(path, Path::new(source)) {
+    let kind = extract::kind_of(path);
+    if !m.allows_file(path, meta.len(), kind) || m.in_code_project(path, Path::new(source)) || meta.len() > extract::hard_cap(path) {
         drop_file(db, index, path);
         return Ok(0);
     }
-    if db::is_excluded(db, &file_ident(path)?)? {
+    let ident = file_ident(path)?;
+    if db::is_excluded(db, &ident)? {
         return Ok(0);
     }
-    let hash = blake3::hash(&std::fs::read(path)?).to_hex().to_string();
+    let hash = hash_file(path)?;
+    // unchanged since it was read and embedded: nothing to do
+    if db::content_hash(db, &ident)?.as_deref() == Some(hash.as_str()) {
+        db::mark_present(db, &ident)?;
+        return Ok(0);
+    }
+    if risky(kind) && is_bad(db, &hash) {
+        return Ok(0);
+    }
     let modified: DateTime<Utc> = meta.modified().map(DateTime::<Utc>::from).unwrap_or_else(|_| Utc::now());
-    let ex = extract::extract(path)?;
+    if risky(kind) {
+        db::setting_set(db, READING, &hash)?;
+    }
+    let ex = extract::extract(path);
+    if risky(kind) {
+        let _ = db::setting_del(db, READING);
+    }
+    let ex = ex?;
     if m.rules().skip_textless_images && ex.kind == "image" && ex.units.iter().map(|u| u.text.trim().len()).sum::<usize>() < 20 {
         drop_file(db, index, path);
         return Ok(0);
@@ -331,14 +405,14 @@ fn ingest_file(
     let item = NewItem {
         kind: ex.kind.to_string(),
         source: source.to_string(),
-        ident: file_ident(path)?,
+        ident,
         title: path.file_name().and_then(|n| n.to_str()).unwrap_or("untitled").to_string(),
         location: short_location(&folder, source),
         uri: file_uri(path),
         modified_at: modified,
         size_label: ex.size_label,
         size_num: ex.size_num,
-        content_hash: Some(hash),
+        content_hash: embedder.lock().is_some().then_some(hash),
     };
     let (item_id, changed) = db::upsert_item(db, &item)?;
     if !changed {
@@ -373,7 +447,7 @@ fn ingest_chat(
         modified_at: modified,
         size_label: format!("{} turns", p.messages.len()),
         size_num: p.messages.len() as i64,
-        content_hash: Some(hash),
+        content_hash: embedder.lock().is_some().then_some(hash),
     };
     let (item_id, changed) = db::upsert_item(db, &item)?;
     if !changed {
@@ -404,7 +478,7 @@ fn embed_and_store(
     let ids = db::replace_chunks(db, item_id, &chunks)?;
     let mut guard = embedder.lock();
     let Some(e) = guard.as_mut() else {
-        // model not ready: chunks are in FTS already; vectors get backfilled by a later sweep
+        // model not ready: chunks are in FTS already; the item keeps no hash, so it is read again once the model loads
         return Ok(chunks.len());
     };
     let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();

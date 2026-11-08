@@ -39,6 +39,7 @@ usearch = "2"
 pdf-extract = "0.7"
 docx-rs = "0.4"
 calamine = "0.28"
+zip = { version = "4", default-features = false } # only to read a zip's table of contents
 
 [features]
 default = ["ort-download"]

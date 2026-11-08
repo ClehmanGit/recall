@@ -218,6 +218,25 @@ pub fn replace_chunks(db: &Db, item_id: i64, chunks: &[NewChunk]) -> Result<Vec<
     Ok(ids)
 }
 
+/// The stored content hash of an item; None if unknown or never fully embedded.
+pub fn content_hash(db: &Db, ident: &str) -> Result<Option<String>> {
+    Ok(db.lock()
+        .query_row("SELECT content_hash FROM items WHERE ident = ?1", params![ident], |r| r.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten())
+}
+
+pub fn mark_present(db: &Db, ident: &str) -> Result<()> {
+    db.lock().execute("UPDATE items SET missing = 0 WHERE ident = ?1 AND missing != 0", params![ident])?;
+    Ok(())
+}
+
+/// Items stored while the model was still loading: their text is searchable
+/// by keyword but has no vectors yet.
+pub fn has_unembedded(db: &Db) -> bool {
+    db.lock().query_row("SELECT 1 FROM items WHERE content_hash IS NULL LIMIT 1", [], |_| Ok(())).optional().ok().flatten().is_some()
+}
+
 pub fn mark_missing(db: &Db, ident: &str) -> Result<()> {
     db.lock()
         .execute("UPDATE items SET missing = 1 WHERE ident = ?1", params![ident])?;
@@ -364,7 +383,7 @@ pub fn chat_versions(db: &Db, platform: &str) -> Result<std::collections::HashMa
     let conn = db.lock();
     let prefix = format!("{platform}:");
     let mut out = std::collections::HashMap::new();
-    let mut stmt = conn.prepare("SELECT ident, modified_at FROM items WHERE kind = 'chat' AND source = ?1")?;
+    let mut stmt = conn.prepare("SELECT ident, modified_at FROM items WHERE kind = 'chat' AND source = ?1 AND content_hash IS NOT NULL")?;
     for row in stmt.query_map(params![platform], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
         let (ident, modified) = row?;
         if let Some(id) = ident.strip_prefix(&prefix) {
@@ -548,6 +567,11 @@ pub fn setting_set<T: Serialize>(db: &Db, key: &str, value: &T) -> Result<()> {
         "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, serde_json::to_string(value)?],
     )?;
+    Ok(())
+}
+
+pub fn setting_del(db: &Db, key: &str) -> Result<()> {
+    db.lock().execute("DELETE FROM settings WHERE key = ?1", params![key])?;
     Ok(())
 }
 
