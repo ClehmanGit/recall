@@ -120,7 +120,7 @@ export function openHideMenu(anchor: HTMLElement, it: ItemRef) {
     if (item) {
       // the engine deletes a hidden item; Undo re-reads a file right away, a conversation returns with the next backup
       toast(`Hidden: ${item.title}`, { label: "Undo", run: async () => {
-        await api.unexclude(item.ident, item.uri, item.source);
+        await api.unexclude(item.ident);
         announce({ id: it.id, hidden: false });
         toast(item.kind === "chat" ? "Undone. The conversation returns with the next backup." : "Undone. The file returns once it is read again.");
       } });

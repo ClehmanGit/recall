@@ -140,14 +140,18 @@ async fn exclude_item(app: State<'_, Engine>, item_id: i64) -> Result<Option<db:
     Ok(item)
 }
 
-/// Undo for exclude: drops the exclusion and re-queues the file (or waits for the next chat sync).
+/// Undo for exclude: drops the exclusion and, for a file still inside a chosen
+/// folder, reads it again now (a chat returns with the next backup).
 #[tauri::command]
-async fn unexclude(app: State<'_, Engine>, ident: String, uri: String, source: String) -> Result<(), String> {
+async fn unexclude(app: State<'_, Engine>, ident: String) -> Result<(), String> {
+    let row = db::list_excluded(&app.db).map_err(err)?.into_iter().find(|x| x.ident == ident);
     db::unexclude(&app.db, &ident).map_err(err)?;
-    if let Some(p) = uri.strip_prefix("file:///") {
-        let path = PathBuf::from(p);
-        if path.exists() {
-            let _ = app.ingest.tx.send(ingest::Job::File { path, source });
+    if let Some(row) = row.filter(|r| r.kind != "chat") {
+        let path = real_path(&row.label);
+        if let Some(source) = chosen_folder_of(&app, &path) {
+            if path.is_file() {
+                let _ = app.ingest.tx.send(ingest::Job::File { path, source });
+            }
         }
     }
     Ok(())
@@ -196,8 +200,53 @@ fn forbid_previews(handle: &tauri::AppHandle, app: &Engine, path: &str) {
     }
 }
 
+/// The enabled chosen folder that holds `path`, as stored.
+fn chosen_folder_of(app: &Engine, path: &Path) -> Option<String> {
+    db::list_sources(&app.db)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| s.enabled)
+        .find(|s| path.starts_with(real_path(&s.path)))
+        .map(|s| s.path)
+}
+
+fn is_source(app: &Engine, path: &str) -> Result<(), String> {
+    if db::list_sources(&app.db).map_err(err)?.iter().any(|s| s.path == path) {
+        Ok(())
+    } else {
+        Err("That folder is not one Recall searches.".into())
+    }
+}
+
+/// Folders the person picked in the system dialog and has not added yet. Only
+/// these can become sources, so nothing but the person's own choice decides
+/// what Recall reads.
+#[derive(Default)]
+struct Picked(parking_lot::Mutex<std::collections::HashSet<String>>);
+
+/// Opens the system folder picker. For `purpose` "source" the folders are
+/// remembered for `add_source`; for "skip" they only fill the skip list.
 #[tauri::command]
-async fn add_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: String) -> Result<(), String> {
+async fn pick_folders(handle: tauri::AppHandle, picked: State<'_, Picked>, purpose: String) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let title = if purpose == "skip" { "Folders to skip" } else { "Choose folders for Recall" };
+    let h = handle.clone();
+    let chosen = tauri::async_runtime::spawn_blocking(move || h.dialog().file().set_title(title).blocking_pick_folders())
+        .await
+        .map_err(err)?
+        .unwrap_or_default();
+    let paths: Vec<String> = chosen.into_iter().filter_map(|p| p.into_path().ok()).map(|p| p.display().to_string()).collect();
+    if purpose == "source" {
+        picked.0.lock().extend(paths.iter().cloned());
+    }
+    Ok(paths)
+}
+
+#[tauri::command]
+async fn add_source(handle: tauri::AppHandle, app: State<'_, Engine>, picked: State<'_, Picked>, path: String) -> Result<(), String> {
+    if !picked.0.lock().remove(&path) {
+        return Err("Choose the folder with Add folders.".into());
+    }
     db::add_source(&app.db, &path).map_err(err)?;
     allow_previews(&handle, &path);
     app.watch.lock().add_root(Path::new(&path)).map_err(err)?;
@@ -207,6 +256,7 @@ async fn add_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: Stri
 
 #[tauri::command]
 async fn remove_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: String) -> Result<(), String> {
+    is_source(&app, &path)?;
     app.watch.lock().remove_root(Path::new(&path)).map_err(err)?;
     db::remove_source(&app.db, &path).map_err(err)?;
     forbid_previews(&handle, &app, &path);
@@ -215,6 +265,7 @@ async fn remove_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: S
 
 #[tauri::command]
 async fn set_source_enabled(handle: tauri::AppHandle, app: State<'_, Engine>, path: String, enabled: bool) -> Result<(), String> {
+    is_source(&app, &path)?;
     db::set_source_enabled(&app.db, &path, enabled).map_err(err)?;
     if enabled {
         allow_previews(&handle, &path);
@@ -229,6 +280,7 @@ async fn set_source_enabled(handle: tauri::AppHandle, app: State<'_, Engine>, pa
 
 #[tauri::command]
 async fn resync_source(app: State<'_, Engine>, path: String) -> Result<(), String> {
+    is_source(&app, &path)?;
     app.ingest.tx.send(ingest::Job::SweepSource(path)).map_err(err)
 }
 
@@ -407,6 +459,7 @@ pub fn run() {
             }
             app.manage(engine);
             app.manage(conns);
+            app.manage(Picked::default());
             connect::start_scheduler(app.handle().clone());
             // the window starts hidden (tauri.conf.json) so it appears already sized
             if let Some(w) = app.get_webview_window("main") {
@@ -429,6 +482,7 @@ pub fn run() {
             exclude_item,
             unexclude,
             list_excluded,
+            pick_folders,
             add_source,
             remove_source,
             set_source_enabled,

@@ -50,9 +50,9 @@ fn in_chosen_folder(app: &Engine, path: &Path) -> bool {
         .any(|s| path.starts_with(real_path(&s.path)))
 }
 
-/// A page number or a message id: letters, digits, `-` and `_` only.
+/// A page number or a message id: letters, digits, `-`, `_` and `:` only.
 fn clean_anchor(anchor: Option<String>) -> Option<String> {
-    anchor.filter(|a| !a.is_empty() && a.len() <= 128 && a.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    anchor.filter(|a| !a.is_empty() && a.len() <= 128 && a.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':')))
 }
 
 #[tauri::command]

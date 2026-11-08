@@ -19,6 +19,7 @@
     "allow-exclude-item",
     "allow-unexclude",
     "allow-list-excluded",
+    "allow-pick-folders",
     "allow-add-source",
     "allow-remove-source",
     "allow-set-source-enabled",
@@ -36,7 +37,6 @@
     "allow-connect-platform",
     "allow-sync-platform",
     "allow-disconnect-platform",
-    "core:default",
-    "dialog:allow-open"
+    "core:default"
   ]
 }

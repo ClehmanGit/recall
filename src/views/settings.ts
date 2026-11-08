@@ -1,6 +1,5 @@
 // Settings: sources, what to skip, chat apps, model, storage, about. Switches and pickers, no typing.
 
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type Rules, type Status } from "../api";
 import { $, esc, fmtBytes, fmtDate, shortPath, toast, FOLDER_SVG, PLATFORM_LABEL, PLATFORM_MARK, assetUrl } from "../ui";
 import { pickFolders } from "./search";
@@ -172,7 +171,7 @@ function wire(s: Status) {
     row.querySelector<HTMLButtonElement>(".disconnect")?.addEventListener("click", async () => { if (confirm(`Disconnect ${PLATFORM_LABEL[p]}? Recall signs out of it. Conversations already indexed stay until you hide them or rebuild the index.`)) { await api.disconnectPlatform(p); renderSettings(); } });
   });
   root.querySelectorAll<HTMLElement>("#s-excluded .row[data-ident]").forEach((row) => {
-    $(".restore", row).onclick = async () => { await api.unexclude(row.dataset.ident!, "", ""); renderSettings(); toast("Shown again on next refresh"); };
+    $(".restore", row).onclick = async () => { await api.unexclude(row.dataset.ident!); renderSettings(); toast("Shown again on next refresh"); };
   });
 
   bindSwitch("r-projects", "skip_code_projects");
@@ -186,8 +185,7 @@ function wire(s: Status) {
   $<HTMLSelectElement>("#r-max").onchange = (e) => { rules.max_mb = Number((e.target as HTMLSelectElement).value); save(); };
 
   $("#r-skip-add").onclick = async () => {
-    const picked = await openDialog({ directory: true, multiple: true, title: "Folders to skip" });
-    const list = Array.isArray(picked) ? picked : picked ? [picked] : [];
+    const list = await api.pickFolders("skip");
     for (const f of list) if (!rules.skipped_folders.includes(f)) rules.skipped_folders.push(f);
     if (list.length) { await save(); renderSettings(); }
   };

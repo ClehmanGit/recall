@@ -16,6 +16,7 @@ fn main() {
         "exclude_item",
         "unexclude",
         "list_excluded",
+        "pick_folders",
         "add_source",
         "remove_source",
         "set_source_enabled",

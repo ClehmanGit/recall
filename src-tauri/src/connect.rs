@@ -203,6 +203,8 @@ fn ensure_window(app: &AppHandle, platform: &str, show: bool) -> Result<tauri::W
         .initialization_script(READER)
         // nothing but https: no file:, no custom schemes, no plain http
         .on_navigation(|url| url.scheme() == "https" || url.as_str() == "about:blank")
+        // a hidden window must never save files to the computer
+        .on_download(|_, _| false)
         // origin and path only: query strings can carry sign-in tokens
         .on_page_load(move |_w, e| debug!("{p}: page {:?} {}{}", e.event(), e.url().origin().ascii_serialization(), e.url().path()))
         .build()
@@ -237,12 +239,37 @@ pub async fn sync_platform(app: AppHandle, engine: tauri::State<'_, Engine>, con
 #[tauri::command]
 pub async fn disconnect_platform(app: AppHandle, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String) -> Result<(), String> {
     valid(&platform)?;
+    sign_out(&app, &platform);
     if let Some(w) = app.get_webview_window(&label(&platform)) {
-        let _ = w.clear_all_browsing_data();
         let _ = w.close();
     }
     conns.update(&engine, &platform, |c| *c = Connection { state: "never".into(), ..Default::default() });
     Ok(())
+}
+
+/// Deletes the platform's sign-in cookies, and only its own: the windows share
+/// one browser profile, so clearing everything would sign out the other apps
+/// too. Works whether or not the platform's window is open.
+fn sign_out(app: &AppHandle, platform: &str) {
+    let domains: &[&str] = match platform {
+        "claude" => &["claude.ai", "anthropic.com"],
+        "gemini" => &["google.com"],
+        _ => &["chatgpt.com", "openai.com"],
+    };
+    let Some(w) = app.get_webview_window(&label(platform)).or_else(|| app.get_webview_window("main")) else { return };
+    match w.cookies() {
+        Ok(all) => {
+            let mut n = 0;
+            for c in all {
+                let d = c.domain().unwrap_or("").trim_start_matches('.').to_string();
+                if domains.iter().any(|x| d == *x || d.ends_with(&format!(".{x}"))) {
+                    if w.delete_cookie(c).is_ok() { n += 1; }
+                }
+            }
+            info!("{platform}: signed out ({n} cookies removed)");
+        }
+        Err(e) => warn!("{platform}: could not read cookies to sign out: {e}"),
+    }
 }
 
 // ---------- commands called from inside a sign-in window ----------
@@ -262,6 +289,70 @@ pub async fn connect_known(window: tauri::WebviewWindow, engine: tauri::State<'_
     Ok(known)
 }
 
+/// Longest title, message and batch the app accepts from a page.
+const MAX_TITLE: usize = 300;
+const MAX_TEXT: usize = 200_000;
+const MAX_MESSAGES: usize = 5_000;
+const MAX_BATCH: usize = 500;
+
+fn id_ok(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 128 && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':'))
+}
+
+fn cut(s: &mut String, max: usize) {
+    if s.len() > max {
+        let mut end = max;
+        while !s.is_char_boundary(end) { end -= 1; }
+        s.truncate(end);
+    }
+}
+
+/// Chats as the page sent them, made safe to store: the platform is the
+/// checked one, the link is built here from the id, ids are plain, dates
+/// parse, and nothing is unboundedly long. Anything else is dropped.
+fn clean(platform: &str, conversations: Vec<ChatPayload>) -> Vec<ChatPayload> {
+    let mut out = Vec::new();
+    for mut c in conversations.into_iter().take(MAX_BATCH) {
+        if !id_ok(&c.id) || (platform != "gemini" && c.id.contains(':')) {
+            warn!("{platform}: dropped a chat with an unexpected id");
+            continue;
+        }
+        c.platform = platform.to_string();
+        c.url = match platform {
+            "claude" => format!("https://claude.ai/chat/{}", c.id),
+            "gemini" => format!("https://gemini.google.com/app/{}", c.id.trim_start_matches("c_")),
+            _ => format!("https://chatgpt.com/c/{}", c.id),
+        };
+        c.updated_at = chrono::DateTime::parse_from_rfc3339(&c.updated_at)
+            .map(|d| d.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now())
+            .to_rfc3339();
+        c.title = c.title.chars().filter(|ch| !ch.is_control()).collect();
+        cut(&mut c.title, MAX_TITLE);
+        c.messages.truncate(MAX_MESSAGES);
+        for m in &mut c.messages {
+            cut(&mut m.text, MAX_TEXT);
+            if m.id.as_deref().is_some_and(|id| !id_ok(id)) { m.id = None; }
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// A page's error message, short and without ids, for the log and Settings.
+fn tidy_error(e: Option<String>) -> Option<String> {
+    e.map(|e| {
+        let mut words: Vec<String> = e
+            .split_whitespace()
+            .map(|w| if w.chars().filter(|c| c.is_ascii_hexdigit()).count() >= 16 { "…".to_string() } else { w.to_string() })
+            .collect();
+        words.dedup();
+        let mut s = words.join(" ");
+        cut(&mut s, 200);
+        s
+    })
+}
+
 #[tauri::command]
 pub async fn connect_ingest(window: tauri::WebviewWindow, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String, conversations: Vec<ChatPayload>) -> Result<usize, String> {
     own(&window, &platform)?;
@@ -270,6 +361,7 @@ pub async fn connect_ingest(window: tauri::WebviewWindow, engine: tauri::State<'
     if enabled.get(&platform).copied() == Some(false) {
         return Ok(0);
     }
+    let conversations = clean(&platform, conversations);
     let held = db::chat_versions(&engine.db, &platform).unwrap_or_default();
     let mut new = 0;
     {
@@ -295,6 +387,9 @@ pub async fn connect_ingest(window: tauri::WebviewWindow, engine: tauri::State<'
 #[tauri::command]
 pub async fn connect_progress(window: tauri::WebviewWindow, conns: tauri::State<'_, Connections>, platform: String, pass: String, stage: String, done: usize, total: usize) -> Result<(), String> {
     own(&window, &platform)?;
+    let (mut pass, mut stage) = (pass, stage);
+    cut(&mut pass, 16);
+    cut(&mut stage, 32);
     // kept in memory only; the state is saved with the next report
     let mut m = conns.0.lock();
     let c = m.entry(platform).or_default();
@@ -325,6 +420,8 @@ pub async fn connect_report(
     remaining: Option<usize>,
 ) -> Result<(), String> {
     own(&window, &platform)?;
+    let error = tidy_error(error);
+    let pass = pass.map(|mut p| { cut(&mut p, 16); p });
     info!("{platform}: report signed_in={signed_in} pass={pass:?} synced={synced} total={total:?} remaining={remaining:?} error={error:?}");
     let w = app.get_webview_window(&label(&platform));
     if signed_in {

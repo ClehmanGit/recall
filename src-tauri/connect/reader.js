@@ -97,8 +97,7 @@
           id: m.uuid, role: m.sender === "human" ? "user" : "assistant",
           text: (m.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n") || m.text || "",
         })).filter((m) => m.text.trim());
-        const attachments = (c.chat_messages || []).reduce((n, m) => n + (m.attachments?.length || 0) + (m.files?.length || 0), 0);
-        return { platform: "claude", id: s.id, title: s.title, url: s.url, updated_at: c.updated_at || s.updated_at, messages, attachments };
+        return { id: s.id, title: s.title, updated_at: c.updated_at || s.updated_at, messages };
       },
     };
   })();
@@ -184,7 +183,7 @@
           if (typeof model === "string" && model.trim()) messages.push({ id: id ? `${id}:model` : null, role: "assistant", text: model });
         }
         if (!messages.length) return null;
-        return { platform: "gemini", id: s.id, title: s.title, url: s.url, updated_at: newest ? iso(newest) : s.updated_at || new Date().toISOString(), messages, attachments: 0 };
+        return { id: s.id, title: s.title, updated_at: newest ? iso(newest) : s.updated_at || new Date().toISOString(), messages };
       },
     };
   })();
@@ -226,7 +225,7 @@
           .filter((m) => m && m.author && ["user", "assistant"].includes(m.author.role))
           .map((m) => ({ id: m.id, role: m.author.role, text: (m.content?.parts || []).filter((p) => typeof p === "string").join("\n") }))
           .filter((m) => m.text.trim());
-        return { platform: "chatgpt", id: s.id, title: c.title || s.title, url: s.url, updated_at: iso(c.update_time) || s.updated_at, messages, attachments: 0 };
+        return { id: s.id, title: c.title || s.title, updated_at: iso(c.update_time) || s.updated_at, messages };
       },
     };
   })();
