@@ -116,7 +116,7 @@ Closing the window keeps Recall running in the tray so folders and chats stay cu
 
 ## Model
 
-`src-tauri/models/model.json` names the model, its dimension, pooling (`cls` or `mean`) and query prefix; the engine reads it at boot and opens `vectors-<dim>.usearch`. `MODEL=qwen npm run model` fetches Qwen3-Embedding-0.6B instead (1024-dim, ~600 MB); then Settings › Data › Rebuild index.
+`src-tauri/models/model.json` names the model, its dimension, pooling (`cls` or `mean`) and query prefix; the engine reads it at boot and opens `vectors-<dim>.usearch`. `npm run model` fetches bge-small-en-v1.5 from a fixed revision and checks each file's SHA-256 (`scripts/fetch-model.mjs`); a different model needs a new revision, new hashes, and Settings › Data › Rebuild index.
 
 ## Network
 

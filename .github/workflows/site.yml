@@ -1,7 +1,8 @@
 # Publishes site/ to GitHub Pages: one static page with its own fonts and images,
 # nothing loaded from anywhere else. Pages serves it over HTTPS.
 # The download button points at the newest release's Recall-Setup.exe
-# (see release.yml), so a new version needs no change here.
+# (see release.yml), so a new version needs no change here. Actions are
+# pinned to full commits; Dependabot proposes updates.
 name: site
 
 on:
@@ -22,15 +23,17 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Point the links at this repository
         run: |
           sed -i "s#REPLACE_ME/recall#${GITHUB_REPOSITORY}#g" site/index.html
       - name: Stamp the style and script links so visitors never get a stale copy
         run: |
           sed -i -E "s#\?v=[^\"]*#?v=${GITHUB_SHA::8}#g" site/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with: { path: site }
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

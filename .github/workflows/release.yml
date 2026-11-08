@@ -1,13 +1,16 @@
 # Builds the Windows installer and attaches it to a GitHub Release.
-# Trigger: push a tag like v2.0.0. Nobody downloading Recall ever builds anything.
+# Trigger: push a tag like v2.1.1. Nobody downloading Recall ever builds anything.
 #
-#   git tag v2.0.0
-#   git push origin v2.0.0
+#   git tag v2.1.1
+#   git push origin v2.1.1
 #
-# Optional repository secrets:
-#   RECALL_FEEDBACK_URL   endpoint for the feedback button (omit to hide the button)
-#   WINDOWS_CERT_B64      base64 of a .pfx code-signing certificate
-#   WINDOWS_CERT_PASSWORD its password
+# Every action is pinned to a full commit, so a moved or hijacked tag cannot
+# change what builds the installer; Dependabot proposes updates
+# (.github/dependabot.yml). The embedding model is pinned and hash-checked
+# by scripts/fetch-model.mjs.
+#
+# Optional repository secret:
+#   RECALL_FEEDBACK_URL   https endpoint for the feedback button (omit to hide the button)
 
 name: release
 
@@ -17,22 +20,30 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write # create the release and upload the installer
+    env:
+      TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: |
             . -> target
@@ -43,37 +54,30 @@ jobs:
       - name: Fetch embedding model
         run: npm run model
 
-      - name: Import signing certificate
-        if: ${{ env.WINDOWS_CERT_B64 != '' }}
-        shell: pwsh
-        env:
-          WINDOWS_CERT_B64: ${{ secrets.WINDOWS_CERT_B64 }}
-        run: |
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_B64))
-          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$env:RUNNER_TEMP\cert.pfx" >> $env:GITHUB_ENV
-
       - name: Build and publish
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RECALL_FEEDBACK_URL: ${{ secrets.RECALL_FEEDBACK_URL }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERT_B64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Recall ${{ github.ref_name }}"
-          releaseBody: "Download Recall-Setup.exe below and run it."
+          releaseBody: "Download Recall-Setup.exe below and run it. SHA256SUMS.txt holds its fingerprint."
           releaseDraft: false
           prerelease: false
           args: --bundles nsis
 
       # The website links to releases/latest/download/Recall-Setup.exe, so every
-      # release also carries the installer under that fixed name.
-      - name: Attach Recall-Setup.exe
+      # release also carries the installer under that fixed name, with its
+      # SHA-256 fingerprint so anyone can check their download.
+      - name: Attach Recall-Setup.exe and its fingerprint
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $exe = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-          Copy-Item $exe.FullName "$env:RUNNER_TEMP/Recall-Setup.exe"
-          gh release upload "${{ github.ref_name }}" "$env:RUNNER_TEMP/Recall-Setup.exe" --clobber
+          $out = "$env:RUNNER_TEMP/Recall-Setup.exe"
+          Copy-Item $exe.FullName $out
+          $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()
+          "$hash  Recall-Setup.exe" | Out-File "$env:RUNNER_TEMP/SHA256SUMS.txt" -Encoding ascii
+          gh release upload "$env:TAG" $out "$env:RUNNER_TEMP/SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
