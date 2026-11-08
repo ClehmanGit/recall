@@ -163,29 +163,69 @@ async fn list_excluded(app: State<'_, Engine>) -> Result<Vec<db::ExcludedRow>, S
 
 // ---------- sources and rules ----------
 
+// The window shows image thumbnails and quick-view previews by reading files
+// through Tauri's asset protocol. Its scope starts empty (tauri.conf.json) and
+// holds only the folders chosen in Settings, so the window can read those
+// files and nothing else on the computer.
+
+fn real_path(path: &str) -> PathBuf {
+    // the protocol checks the file's real, on-disk path, so match its casing
+    std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path))
+}
+
+fn allow_previews(handle: &tauri::AppHandle, path: &str) {
+    if let Err(e) = handle.asset_protocol_scope().allow_directory(real_path(path), true) {
+        tracing::warn!("could not allow previews for {path}: {e}");
+    }
+}
+
+/// Tauri can add to the scope but not take anything back; it can only forbid a
+/// folder, and that lasts until Recall restarts, even if the folder is added
+/// again (its previews come back after a restart). A folder that overlaps one
+/// still chosen is left alone so the other keeps its previews.
+fn forbid_previews(handle: &tauri::AppHandle, app: &Engine, path: &str) {
+    let gone = real_path(path);
+    let overlaps = db::list_sources(&app.db)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| s.enabled && s.path != path)
+        .map(|s| real_path(&s.path))
+        .any(|kept| kept.starts_with(&gone) || gone.starts_with(&kept));
+    if overlaps {
+        return;
+    }
+    if let Err(e) = handle.asset_protocol_scope().forbid_directory(gone, true) {
+        tracing::warn!("could not forbid previews for {path}: {e}");
+    }
+}
+
 #[tauri::command]
-async fn add_source(app: State<'_, Engine>, path: String) -> Result<(), String> {
+async fn add_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: String) -> Result<(), String> {
     db::add_source(&app.db, &path).map_err(err)?;
+    allow_previews(&handle, &path);
     app.watch.lock().add_root(Path::new(&path)).map_err(err)?;
     app.ingest.tx.send(ingest::Job::SweepSource(path)).map_err(err)?;
     Ok(())
 }
 
 #[tauri::command]
-async fn remove_source(app: State<'_, Engine>, path: String) -> Result<(), String> {
+async fn remove_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: String) -> Result<(), String> {
     app.watch.lock().remove_root(Path::new(&path)).map_err(err)?;
-    db::remove_source(&app.db, &path).map_err(err)
+    db::remove_source(&app.db, &path).map_err(err)?;
+    forbid_previews(&handle, &app, &path);
+    Ok(())
 }
 
 #[tauri::command]
-async fn set_source_enabled(app: State<'_, Engine>, path: String, enabled: bool) -> Result<(), String> {
+async fn set_source_enabled(handle: tauri::AppHandle, app: State<'_, Engine>, path: String, enabled: bool) -> Result<(), String> {
     db::set_source_enabled(&app.db, &path, enabled).map_err(err)?;
-    let mut w = app.watch.lock();
     if enabled {
-        w.add_root(Path::new(&path)).map_err(err)?;
+        allow_previews(&handle, &path);
+        app.watch.lock().add_root(Path::new(&path)).map_err(err)?;
         let _ = app.ingest.tx.send(ingest::Job::SweepSource(path));
     } else {
-        w.remove_root(Path::new(&path)).map_err(err)?;
+        app.watch.lock().remove_root(Path::new(&path)).map_err(err)?;
+        forbid_previews(&handle, &app, &path);
     }
     Ok(())
 }
@@ -363,6 +403,11 @@ pub fn run() {
             let model_dir = app.path().resource_dir().map(|r| r.join("models")).unwrap_or_else(|_| PathBuf::from("models"));
             let engine = recall_core::boot(model_dir)?;
             let conns = connect::Connections::load(&engine);
+            for s in db::list_sources(&engine.db).unwrap_or_default() {
+                if s.enabled {
+                    allow_previews(app.handle(), &s.path);
+                }
+            }
             app.manage(engine);
             app.manage(conns);
             connect::start_scheduler(app.handle().clone());
