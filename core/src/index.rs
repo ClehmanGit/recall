@@ -52,6 +52,20 @@ impl VectorIndex {
         Ok(())
     }
 
+    /// Removes the vectors of these chunks, so deleted text leaves no trace here.
+    pub fn forget(&mut self, chunk_ids: &[i64]) {
+        for &id in chunk_ids {
+            let _ = self.remove(id as u64);
+        }
+    }
+
+    /// Empties the index (Rebuild index).
+    pub fn clear(&mut self) -> Result<()> {
+        self.index.reset()?;
+        self.index.reserve(10_000)?;
+        Ok(())
+    }
+
     /// Returns (chunk_id, cosine similarity in 0..1).
     pub fn search(&self, q: &[f32], k: usize) -> Result<Vec<(u64, f32)>> {
         let m = self.index.search(q, k)?;

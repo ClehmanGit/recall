@@ -28,8 +28,6 @@ pub struct Rules {
     pub max_mb: u64,
     /// Follow shortcuts and linked folders.
     pub follow_links: bool,
-    /// Read text found inside images.
-    pub ocr: bool,
     /// Folders the user picked to skip, absolute paths.
     pub skipped_folders: Vec<String>,
     /// Only index these kinds. Empty = all. Values match item kinds:
@@ -48,7 +46,6 @@ impl Default for Rules {
             skip_textless_images: true,
             max_mb: 64,
             follow_links: false,
-            ocr: true,
             skipped_folders: vec![],
             only_kinds: vec![],
         }

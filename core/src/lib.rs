@@ -24,6 +24,9 @@ pub struct Engine {
     pub data_dir: PathBuf,
 }
 
+/// The chat apps Recall can back up, in the order they are listed everywhere.
+pub const PLATFORMS: [&str; 3] = ["claude", "chatgpt", "gemini"];
+
 pub fn data_dir() -> PathBuf {
     dirs::data_local_dir().unwrap_or_else(|| PathBuf::from(".")).join("Recall")
 }

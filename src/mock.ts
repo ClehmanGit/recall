@@ -28,7 +28,7 @@ const items = [
   { id: 3, kind: "code", source: "C:/Users/you/Projects", ident: "f:3", title: "protocell_field.py", location: "~/Projects/protocell", uri: "file:///C:/Users/you/Projects/protocell/protocell_field.py", modified_at: iso(now - 70 * day), size_label: "312 lines", size_num: 312, missing: false, starred: true, indexed_at: iso(now - 2 * day),
     hits: [{ chunk_id: 8, locator: "L44", anchor: "44", score: .71, text: "# abiogenesis sim: gradient-driven vesicle growth, see Lane 2015\ndef step(field, dt):\n    grad = np.gradient(field.protons)\n    field.vesicles += dt * k * grad\n    return field" }], total_hits: 1 },
   { id: 4, kind: "image", source: "C:/Users/you/Downloads", ident: "f:4", title: "vent_diagram.png", location: "~/Downloads", uri: "file:///C:/Users/you/Downloads/vent_diagram.png", modified_at: iso(now - 20 * day), size_label: "1.2 MB", size_num: 1258291, missing: false, starred: false, indexed_at: iso(now - 25 * 60_000),
-    hits: [{ chunk_id: 9, locator: "OCR", anchor: null, score: .63, text: "Lost City hydrothermal field, serpentinization, H2 flux, alkaline vent chimney" }], total_hits: 1 },
+    hits: [{ chunk_id: 9, locator: "name", anchor: null, score: .63, text: "vent diagram" }], total_hits: 1 },
   { id: 5, kind: "spreadsheet", source: "C:/Users/you/Projects", ident: "f:5", title: "glossary_terms.xlsx", location: "~/Projects/protocell", uri: "file:///C:/Users/you/Projects/protocell/glossary_terms.xlsx", modified_at: iso(now - 1 * day), size_label: "4,420 rows", size_num: 4420, missing: false, starred: false, indexed_at: iso(now - 8 * 3600_000),
     hits: [{ chunk_id: 10, locator: "Sheet1", anchor: "Sheet1", score: .58, text: "id | term | parent | status\nT-0412 | abiogenesis | origins | merged\nT-0413 | prebiotic chemistry | origins | kept\nT-0414 | protocell | origins | kept" }], total_hits: 1 },
   { id: 6, kind: "chat", source: "gemini", ident: "gemini:6", title: "Block universe and the present", location: "Gemini", uri: "https://gemini.google.com/app/6", modified_at: iso(now - 83 * day), size_label: "36 turns", size_num: 36, missing: false, starred: true, indexed_at: iso(now - 5 * day), hits: [], total_hits: 0 },
@@ -46,7 +46,7 @@ const FILL: [string, string, string, string][] = [
   ["chat", "Sourdough starter help", "Claude", "58 turns"],
   ["pdf", "Home insurance policy.pdf", "~/Documents/House", "5 pages"],
   ["image", "vent_chimney_sem.png", "~/Downloads", "840 KB"],
-  ["document", "Grant draft v3.docx", "~/Documents/Grants", "2,210 words"],
+  ["document", "Cover letter v3.docx", "~/Documents/Letters", "2,210 words"],
   ["chat", "Owl logo ideas", "Gemini", "12 turns"],
   ["spreadsheet", "Reading list.xlsx", "~/Documents", "273 rows"],
   ["text", "field_notes.md", "~/Projects/protocell", "96 lines"],
@@ -76,12 +76,12 @@ let queued = 0, done = 0, current = "";
 let sources = [{ path: "C:/Users/you/Downloads", enabled: true, count: 2041 }, { path: "C:/Users/you/Projects", enabled: true, count: 6733 }];
 let recent: [string, number][] = [["abiogenesis", 4], ["dishwasher warranty", 31], ["houseplant watering", 2]];
 let excluded: { ident: string; label: string; kind: string; at: string }[] = [];
-let rules = { skip_dev_folders: true, skip_hidden: true, skip_packages: true, skip_media: true, skip_code_projects: true, skip_textless_images: true, max_mb: 64, follow_links: false, ocr: true, skipped_folders: ["C:/Users/you/Downloads/installers"], only_kinds: [] as string[] };
+let rules = { skip_dev_folders: true, skip_hidden: true, skip_packages: true, skip_media: true, skip_code_projects: true, skip_textless_images: true, max_mb: 64, follow_links: false, skipped_folders: ["C:/Users/you/Downloads/installers"], only_kinds: [] as string[] };
 let platformEnabled: Record<string, boolean> = {};
 let connections: Record<string, any> = {
-  claude: { state: "connected", last_sync: iso(now - 9 * 60_000), last_error: null, synced: 3 },
-  gemini: { state: "signed_out", last_sync: iso(now - 2 * day), last_error: null, synced: 0 },
-  chatgpt: { state: "never", last_sync: null, last_error: null, synced: 0 },
+  claude: { state: "connected", last_sync: iso(now - 9 * 60_000), last_error: null },
+  gemini: { state: "signed_out", last_sync: iso(now - 2 * day), last_error: null },
+  chatgpt: { state: "never", last_sync: null, last_error: null },
 };
 
 /** `?empty` starts with a new, empty library, to see the first-run screens. */
@@ -94,9 +94,9 @@ if (new URLSearchParams(location.search).has("empty")) {
 
 const handlers: Record<string, Handler> = {
   status: () => ({
-    version: "2.0.0", chunks: 18402 + done * 7, items: items.length + Math.floor(done / 2), vectors: 18402, embedder_ready: true, model: "bge-small-en-v1.5", dim: 384,
+    version: "2.1.1", chunks: 18402 + done * 7, items: items.length + Math.floor(done / 2), embedder_ready: true, model: "bge-small-en-v1.5",
     sources, platforms: items.length ? [["claude", 1284], ["gemini", 312], ["chatgpt", 97]] : [],
-    platform_enabled: platformEnabled, queued, done, current, feedback_enabled: true, data_dir: "C:/Users/you/AppData/Local/Recall", connections,
+    platform_enabled: platformEnabled, queued, done, current, feedback_enabled: true, connections,
   }),
   search: ({ query }) => {
     const t = (query.q as string).toLowerCase();
@@ -147,9 +147,9 @@ const handlers: Record<string, Handler> = {
   set_platform_enabled: ({ platform, enabled }) => { platformEnabled[platform] = enabled; },
   data_info: () => ({ dir: "C:/Users/you/AppData/Local/Recall", db_bytes: 184_000_000, index_bytes: 56_000_000 }),
   reset_index: () => undefined,
-  connect_platform: ({ platform }) => { connections[platform] = { ...connections[platform], state: "signing_in" }; setTimeout(() => { connections[platform] = { state: "connected", last_sync: iso(Date.now()), last_error: null, synced: 12 }; }, 2500); },
-  sync_platform: ({ platform }) => { connections[platform] = { ...connections[platform], state: "syncing" }; setTimeout(() => { connections[platform] = { state: "connected", last_sync: iso(Date.now()), last_error: null, synced: 2 }; }, 1800); },
-  disconnect_platform: ({ platform }) => { connections[platform] = { state: "never", last_sync: null, last_error: null, synced: 0 }; },
+  connect_platform: ({ platform }) => { connections[platform] = { ...connections[platform], state: "signing_in" }; setTimeout(() => { connections[platform] = { state: "connected", last_sync: iso(Date.now()), last_error: null }; }, 2500); },
+  sync_platform: ({ platform }) => { connections[platform] = { ...connections[platform], state: "syncing" }; setTimeout(() => { connections[platform] = { state: "connected", last_sync: iso(Date.now()), last_error: null }; }, 1800); },
+  disconnect_platform: ({ platform }) => { connections[platform] = { state: "never", last_sync: null, last_error: null }; },
   send_feedback: ({ text }) => { console.info("feedback:", text); },
   // app events (sign-in finished): nothing fires in the browser, but listening must not throw
   "plugin:event|listen": () => 0,

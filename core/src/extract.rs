@@ -245,19 +245,9 @@ fn text(path: &Path) -> Result<Extracted> {
 fn image(path: &Path) -> Result<Extracted> {
     let meta = std::fs::metadata(path)?;
     let size = human_bytes(meta.len());
-    // Without OCR the only searchable text is the filename. OCR plugs in here
-    // (feature "ocr"): run tesseract over the image and push a Unit with locator "OCR".
+    // the only searchable text in a picture is its name
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().replace(['_', '-'], " ");
-    #[allow(unused_mut)]
-    let mut units = vec![Unit { locator: "name".into(), text: stem.clone(), anchor: None }];
-    #[cfg(feature = "ocr")]
-    {
-        if let Ok(t) = crate::ocr::run(path) {
-            if !t.trim().is_empty() {
-                units.push(Unit { locator: "OCR".into(), text: t, anchor: None });
-            }
-        }
-    }
+    let units = vec![Unit { locator: "name".into(), text: stem.clone(), anchor: None }];
     Ok(Extracted { kind: "image", size_label: size, size_num: meta.len() as i64, units })
 }
 

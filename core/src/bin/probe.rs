@@ -7,7 +7,7 @@ use recall_core::{boot, db, ingest, search};
 use std::path::PathBuf;
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().with_env_filter("recall=info").init();
+    tracing_subscriber::fmt().with_env_filter("recall_core=info").init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let model_dir = PathBuf::from("models");
     let app = boot(model_dir)?;

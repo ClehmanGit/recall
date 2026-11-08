@@ -1,5 +1,6 @@
-// outside the desktop shell (plain `npm run web`), run on sample data
-if (!("__TAURI_INTERNALS__" in window)) (await import("./mock")).installMock();
+// outside the desktop shell (plain `npm run web`), run on sample data; a
+// production build leaves the sample data out entirely
+if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) (await import("./mock")).installMock();
 
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";

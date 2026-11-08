@@ -1,7 +1,7 @@
 //! Ingest worker. One background thread owns the embedder and the index; everything
 //! else sends it jobs. Files arrive from the watcher or a sweep; chats arrive from
-//! the sign-in windows. Identity for files is (device, inode) hashed, so a rename or
-//! move keeps the item and a content change re-embeds it.
+//! the sign-in windows. A file is read again only when its content hash changes
+//! (identity: see `file_ident`).
 
 use crate::chunk::{self, Unit};
 use crate::db::{self, Db, NewItem};
@@ -305,10 +305,7 @@ fn prune(db: &Db, index: &VecIndex, root: &str, allowed: &[(PathBuf, u64)]) -> u
 /// Removes an item and its passages' vectors. True when it was removed.
 fn drop_item(db: &Db, index: &VecIndex, id: i64) -> bool {
     let Ok(chunks) = db::remove_item(db, id) else { return false };
-    let mut ix = index.write();
-    for c in chunks {
-        let _ = ix.remove(c as u64);
-    }
+    index.write().forget(&chunks);
     true
 }
 
@@ -475,7 +472,9 @@ fn embed_and_store(
     units: Vec<Unit>,
 ) -> Result<usize> {
     let chunks = chunk::chunk_units(units);
-    let ids = db::replace_chunks(db, item_id, &chunks)?;
+    let (old, ids) = db::replace_chunks(db, item_id, &chunks)?;
+    // before adding: SQLite may hand an old chunk's id to a new one
+    index.write().forget(&old);
     let mut guard = embedder.lock();
     let Some(e) = guard.as_mut() else {
         // model not ready: chunks are in FTS already; the item keeps no hash, so it is read again once the model loads
@@ -492,7 +491,9 @@ fn embed_and_store(
     Ok(chunks.len())
 }
 
-/// Stable identity across renames: hash of (volume, inode) on Unix, (volume serial, file index) on Windows.
+/// A file's identity. Unix: device and inode, so a rename keeps it. Windows: a
+/// hash of path, creation time and attributes (the volume serial and file
+/// index need the by-handle API), so a rename or move makes a new item.
 pub fn file_ident(path: &Path) -> Result<String> {
     let meta = std::fs::metadata(path)?;
     #[cfg(unix)]
@@ -503,7 +504,6 @@ pub fn file_ident(path: &Path) -> Result<String> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
-        // file_index/volume_serial need the by_handle API on stable; fall back to a path+created hash
         let created = meta.created().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
         let key = format!("{}|{}|{}", path.display(), created, meta.file_attributes());
         return Ok(format!("f:{}", blake3::hash(key.as_bytes()).to_hex()));
