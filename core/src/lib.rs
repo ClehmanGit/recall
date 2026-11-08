@@ -37,13 +37,16 @@ pub fn boot(model_dir: PathBuf) -> Result<Engine> {
     let db = db::open(&data_dir.join("recall.sqlite"))?;
     let cfg = embed::ModelConfig::load(&model_dir);
     let index = Arc::new(parking_lot::RwLock::new(index::VectorIndex::open(
-        &data_dir.join(format!("vectors-{}.usearch", cfg.dim)),
+        &data_dir.join(format!("vectors-{}-f16.usearch", cfg.dim)),
         cfg.dim,
     )?));
     let ingest = ingest::start(db.clone(), index.clone(), model_dir);
     let watch = watch::start(ingest.tx.clone())?;
     // left by versions that listened for a browser extension
     let _ = std::fs::remove_file(data_dir.join("bridge.token"));
+    // full-precision index from 2.1.0 and earlier; it never held vectors (the
+    // model's token types were not passed), so nothing is lost
+    let _ = std::fs::remove_file(data_dir.join(format!("vectors-{}.usearch", cfg.dim)));
 
     // watching a large folder tree can take seconds; do it after the window is up
     {

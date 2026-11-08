@@ -79,22 +79,26 @@ impl Progress {
 pub struct Ingest {
     pub tx: Sender<Job>,
     pub embedder: Arc<Mutex<Option<Embedder>>>,
+    /// The model's name once it has loaded; read without waiting on the model.
+    pub model: Arc<std::sync::OnceLock<String>>,
     pub progress: Progress,
 }
 
 pub fn start(db: Db, index: VecIndex, model_dir: PathBuf) -> Ingest {
     let (tx, rx) = crossbeam_channel::unbounded::<Job>();
     let embedder: Arc<Mutex<Option<Embedder>>> = Arc::new(Mutex::new(None));
+    let model: Arc<std::sync::OnceLock<String>> = Arc::default();
     let progress = Progress::default();
 
     // load the model off the main thread; search degrades to keyword-only until it lands
     {
-        let (slot, tx) = (embedder.clone(), tx.clone());
+        let (slot, name, tx) = (embedder.clone(), model.clone(), tx.clone());
         std::thread::Builder::new()
             .name("embedder-load".into())
             .spawn(move || match Embedder::load(&model_dir) {
                 Ok(e) => {
                     info!("embedder ready");
+                    let _ = name.set(e.cfg.name.clone());
                     *slot.lock() = Some(e);
                     // text stored before now (or whose embedding failed) has no vector yet
                     let _ = tx.send(Job::Backfill(0));
@@ -116,7 +120,7 @@ pub fn start(db: Db, index: VecIndex, model_dir: PathBuf) -> Ingest {
             .expect("spawn ingest");
     }
 
-    Ingest { tx, embedder, progress }
+    Ingest { tx, embedder, model, progress }
 }
 
 fn worker(rx: Receiver<Job>, tx: Sender<Job>, db: Db, index: VecIndex, embedder: Arc<Mutex<Option<Embedder>>>, progress: Progress) {
@@ -480,13 +484,14 @@ fn embed_and_store(
     let (old, ids) = db::replace_chunks(db, item_id, &chunks)?;
     // before adding: SQLite may hand an old chunk's id to a new one
     index.write().forget(&old);
-    let mut guard = embedder.lock();
-    let Some(e) = guard.as_mut() else {
-        // model not ready: chunks are in FTS already; the backfill embeds them once it loads
-        return Ok(chunks.len());
-    };
     let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
     for (batch_ids, batch_texts) in ids.chunks(16).zip(texts.chunks(16)) {
+        // one batch per lock, so a long document never makes a search wait
+        let mut guard = embedder.lock();
+        let Some(e) = guard.as_mut() else {
+            // model not ready: chunks are in FTS already; the backfill embeds them once it loads
+            return Ok(chunks.len());
+        };
         let vecs = e.embed(batch_texts)?;
         let mut idx = index.write();
         for (id, v) in batch_ids.iter().zip(vecs.iter()) {
@@ -514,9 +519,11 @@ fn backfill(db: &Db, index: &VecIndex, embedder: &Arc<Mutex<Option<Embedder>>>, 
     if after == 0 || !todo.is_empty() {
         info!("backfill: {} chunks without vectors from id {after}", todo.len());
     }
-    let mut guard = embedder.lock();
-    let Some(e) = guard.as_mut() else { return Ok(None) };
-    for batch in todo.chunks(16) {
+    for batch in todo.chunks(8) {
+        // one small batch per lock, handed fairly to whoever waits: a search
+        // shares the model and should wait half a second at most
+        let mut guard = embedder.lock();
+        let Some(e) = guard.as_mut() else { return Ok(None) };
         let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
         match e.embed(&texts) {
             Ok(vecs) => {
@@ -534,9 +541,10 @@ fn backfill(db: &Db, index: &VecIndex, embedder: &Arc<Mutex<Option<Embedder>>>, 
                 }
             }
         }
+        parking_lot::MutexGuard::unlock_fair(guard);
     }
-    drop(guard);
-    if !todo.is_empty() {
+    // the index file grows to hundreds of MB: save every 10,000 passages, not every slice
+    if !todo.is_empty() && last / 10_000 != after / 10_000 {
         let _ = index.read().save();
     }
     Ok(Some(last + 1))

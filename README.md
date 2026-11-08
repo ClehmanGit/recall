@@ -120,7 +120,7 @@ Closing the window keeps Recall running in the tray so folders and chats stay cu
 
 ## Model
 
-`src-tauri/models/model.json` names the model, its dimension, pooling (`cls` or `mean`) and query prefix; the engine reads it at boot and opens `vectors-<dim>.usearch`. `npm run model` fetches bge-small-en-v1.5 from a fixed revision and checks each file's SHA-256 (`scripts/fetch-model.mjs`); a different model needs a new revision, new hashes, and Settings › Storage › Rebuild index.
+`src-tauri/models/model.json` names the model, its dimension, pooling (`cls` or `mean`) and query prefix; the engine reads it at boot and opens `vectors-<dim>-f16.usearch` (half-precision vectors). `npm run model` fetches bge-small-en-v1.5 from a fixed revision and checks each file's SHA-256 (`scripts/fetch-model.mjs`); a different model needs a new revision, new hashes, and Settings › Storage › Rebuild index.
 
 ## Network
 
@@ -138,7 +138,7 @@ One curve (`--ease`), one tempo band (140–260 ms), defined once at the top of 
 
 `%LOCALAPPDATA%\Recall\`
 - `recall.sqlite` — items, chunks, FTS index, sources, rules, exclusions, settings (`secure_delete` on, so deleted text is overwritten)
-- `vectors-384.usearch` — HNSW index, keyed by chunk id
+- `vectors-384-f16.usearch` — HNSW index of half-precision vectors, keyed by chunk id
 - `recall.log`: what Recall did, for troubleshooting; starts over past 2 MB
 
 Settings › Storage shows sizes; Rebuild index drops items, chunks and vectors and re-sweeps, keeping sources, rules and exclusions.

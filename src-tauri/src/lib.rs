@@ -43,12 +43,12 @@ pub struct Status {
 #[tauri::command]
 async fn status(app: State<'_, Engine>, conns: State<'_, connect::Connections>) -> Result<Status, String> {
     let prog = app.ingest.progress.snapshot();
-    let model = app.ingest.embedder.lock().as_ref().map(|e| e.cfg.name.clone()).unwrap_or_default();
+    let model = app.ingest.model.get().cloned().unwrap_or_default();
     Ok(Status {
         version: VERSION.into(),
         chunks: db::chunk_count(&app.db).map_err(err)?,
         items: db::item_count(&app.db).map_err(err)?,
-        embedder_ready: app.ingest.embedder.lock().is_some(),
+        embedder_ready: app.ingest.model.get().is_some(),
         model,
         sources: db::list_sources(&app.db).map_err(err)?,
         platforms: db::platform_counts(&app.db).map_err(err)?,
