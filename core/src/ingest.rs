@@ -25,6 +25,8 @@ pub enum Job {
     File { path: PathBuf, source: String },
     FileGone { path: PathBuf },
     Chat(ChatPayload),
+    /// Embed stored chunks that have no vector yet, from this chunk id on.
+    Backfill(i64),
     SweepSource(String),
     Save,
 }
@@ -87,20 +89,15 @@ pub fn start(db: Db, index: VecIndex, model_dir: PathBuf) -> Ingest {
 
     // load the model off the main thread; search degrades to keyword-only until it lands
     {
-        let (slot, db, tx) = (embedder.clone(), db.clone(), tx.clone());
+        let (slot, tx) = (embedder.clone(), tx.clone());
         std::thread::Builder::new()
             .name("embedder-load".into())
             .spawn(move || match Embedder::load(&model_dir) {
                 Ok(e) => {
                     info!("embedder ready");
                     *slot.lock() = Some(e);
-                    // files read before this point have no vectors; read them again
-                    // (chats come back with the next backup, see db::chat_versions)
-                    if db::has_unembedded(&db) {
-                        for s in db::list_sources(&db).unwrap_or_default().into_iter().filter(|s| s.enabled) {
-                            let _ = tx.send(Job::SweepSource(s.path));
-                        }
-                    }
+                    // text stored before now (or whose embedding failed) has no vector yet
+                    let _ = tx.send(Job::Backfill(0));
                 }
                 Err(e) => warn!("embedder unavailable, keyword search only: {e:#}"),
             })
@@ -169,6 +166,14 @@ fn worker(rx: Receiver<Job>, tx: Sender<Job>, db: Db, index: VecIndex, embedder:
             Job::SweepSource(root) => {
                 let n = sweep(&tx, &db, &index, &root);
                 progress.queued.fetch_add(n, Ordering::Relaxed);
+                Ok(0)
+            }
+            Job::Backfill(after) => {
+                match backfill(&db, &index, &embedder, after) {
+                    Ok(Some(next)) => rest.push_back(Job::Backfill(next)), // behind any waiting files and chats
+                    Ok(None) => { let _ = tx.send(Job::Save); }
+                    Err(e) => warn!("backfill stopped: {e:#}"),
+                }
                 Ok(0)
             }
             Job::Save => {
@@ -409,7 +414,7 @@ fn ingest_file(
         modified_at: modified,
         size_label: ex.size_label,
         size_num: ex.size_num,
-        content_hash: embedder.lock().is_some().then_some(hash),
+        content_hash: Some(hash),
     };
     let (item_id, changed) = db::upsert_item(db, &item)?;
     if !changed {
@@ -444,7 +449,7 @@ fn ingest_chat(
         modified_at: modified,
         size_label: format!("{} turns", p.messages.len()),
         size_num: p.messages.len() as i64,
-        content_hash: embedder.lock().is_some().then_some(hash),
+        content_hash: Some(hash),
     };
     let (item_id, changed) = db::upsert_item(db, &item)?;
     if !changed {
@@ -477,7 +482,7 @@ fn embed_and_store(
     index.write().forget(&old);
     let mut guard = embedder.lock();
     let Some(e) = guard.as_mut() else {
-        // model not ready: chunks are in FTS already; the item keeps no hash, so it is read again once the model loads
+        // model not ready: chunks are in FTS already; the backfill embeds them once it loads
         return Ok(chunks.len());
     };
     let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
@@ -489,6 +494,52 @@ fn embed_and_store(
         }
     }
     Ok(chunks.len())
+}
+
+/// Embeds up to one slice of stored chunks that have no vector, starting at
+/// chunk id `after`. Returns where to go on, or None when every chunk has one.
+/// A batch that fails is retried one chunk at a time, so one bad passage
+/// cannot keep the rest out of semantic search.
+fn backfill(db: &Db, index: &VecIndex, embedder: &Arc<Mutex<Option<Embedder>>>, after: i64) -> Result<Option<i64>> {
+    const SLICE: usize = 512;
+    let rows = db::chunks_from(db, after, SLICE)?;
+    let Some(&(last, _)) = rows.last() else {
+        info!("backfill done");
+        return Ok(None);
+    };
+    let todo: Vec<(i64, String)> = {
+        let ix = index.read();
+        rows.into_iter().filter(|(id, _)| !ix.contains(*id as u64)).collect()
+    };
+    if after == 0 || !todo.is_empty() {
+        info!("backfill: {} chunks without vectors from id {after}", todo.len());
+    }
+    let mut guard = embedder.lock();
+    let Some(e) = guard.as_mut() else { return Ok(None) };
+    for batch in todo.chunks(16) {
+        let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
+        match e.embed(&texts) {
+            Ok(vecs) => {
+                let mut ix = index.write();
+                for ((id, _), v) in batch.iter().zip(vecs.iter()) {
+                    ix.add(*id as u64, v)?;
+                }
+            }
+            Err(_) => {
+                for (id, t) in batch {
+                    match e.embed(std::slice::from_ref(t)) {
+                        Ok(v) => index.write().add(*id as u64, &v[0])?,
+                        Err(err) => warn!("chunk {id} could not be embedded: {err:#}"),
+                    }
+                }
+            }
+        }
+    }
+    drop(guard);
+    if !todo.is_empty() {
+        let _ = index.read().save();
+    }
+    Ok(Some(last + 1))
 }
 
 /// A file's identity. Unix: device and inode, so a rename keeps it. Windows: a

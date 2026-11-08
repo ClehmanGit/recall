@@ -52,6 +52,10 @@ impl VectorIndex {
         Ok(())
     }
 
+    pub fn contains(&self, id: u64) -> bool {
+        self.index.contains(id)
+    }
+
     /// Removes the vectors of these chunks, so deleted text leaves no trace here.
     pub fn forget(&mut self, chunk_ids: &[i64]) {
         for &id in chunk_ids {

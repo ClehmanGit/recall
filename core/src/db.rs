@@ -235,10 +235,12 @@ pub fn mark_present(db: &Db, ident: &str) -> Result<()> {
     Ok(())
 }
 
-/// Items stored while the model was still loading: their text is searchable
-/// by keyword but has no vectors yet.
-pub fn has_unembedded(db: &Db) -> bool {
-    db.lock().query_row("SELECT 1 FROM items WHERE content_hash IS NULL LIMIT 1", [], |_| Ok(())).optional().ok().flatten().is_some()
+/// Chunk ids and texts from `after` on, in id order, for the vector backfill.
+pub fn chunks_from(db: &Db, after: i64, limit: usize) -> Result<Vec<(i64, String)>> {
+    let conn = db.lock();
+    let mut stmt = conn.prepare("SELECT id, text FROM chunks WHERE id >= ?1 ORDER BY id LIMIT ?2")?;
+    let rows = stmt.query_map(params![after, limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
 pub fn mark_missing(db: &Db, ident: &str) -> Result<()> {
@@ -390,7 +392,7 @@ pub fn chat_versions(db: &Db, platform: &str) -> Result<std::collections::HashMa
     let conn = db.lock();
     let prefix = format!("{platform}:");
     let mut out = std::collections::HashMap::new();
-    let mut stmt = conn.prepare("SELECT ident, modified_at FROM items WHERE kind = 'chat' AND source = ?1 AND content_hash IS NOT NULL")?;
+    let mut stmt = conn.prepare("SELECT ident, modified_at FROM items WHERE kind = 'chat' AND source = ?1")?;
     for row in stmt.query_map(params![platform], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
         let (ident, modified) = row?;
         if let Some(id) = ident.strip_prefix(&prefix) {

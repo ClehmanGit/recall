@@ -1,6 +1,6 @@
 [package]
 name = "recall"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2021"
 description = "Local semantic search across AI chats and your files."
 
