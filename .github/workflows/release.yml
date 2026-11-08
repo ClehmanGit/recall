@@ -79,7 +79,8 @@ jobs:
           $out = "$env:RUNNER_TEMP/Recall-Setup.exe"
           Copy-Item $exe.FullName $out
           $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()
-          "$hash  Recall-Setup.exe" | Out-File "$env:RUNNER_TEMP/SHA256SUMS.txt" -Encoding ascii
+          # LF line ending, so sha256sum -c reads it on Linux and macOS too
+          [IO.File]::WriteAllText("$env:RUNNER_TEMP/SHA256SUMS.txt", "$hash  Recall-Setup.exe`n")
           gh release upload "$env:TAG" $out "$env:RUNNER_TEMP/SHA256SUMS.txt" --clobber --repo "$env:GITHUB_REPOSITORY"
 
       # The release notes are this version's section of CHANGELOG.md, under a
