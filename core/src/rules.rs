@@ -21,8 +21,9 @@ pub struct Rules {
     /// (Makefile, package.json, ...). A folder added as a source is never skipped
     /// this way, so adding a project on purpose still indexes it.
     pub skip_code_projects: bool,
-    /// Skip pictures with no readable text (icons, sprites, photos): with nothing
-    /// but a file name to go on, they only crowd search results.
+    /// Skip pictures named only by a camera or a number (IMG_0412.jpg,
+    /// Screenshot 2026-01-02.png): a picture is found by its name, and these
+    /// names say nothing. See `camera_name`.
     pub skip_textless_images: bool,
     /// Skip files larger than this many MB. 0 = no limit.
     pub max_mb: u64,
@@ -146,8 +147,35 @@ impl Matcher {
     }
 }
 
+/// True when a picture's file name says nothing about it: once camera and
+/// screenshot prefixes and digits are taken out, fewer than three letters are
+/// left (`IMG_0412`, `DSC01234`, `Screenshot 2026-01-02 101010`, `a1`).
+pub fn camera_name(stem: &str) -> bool {
+    // longest first, so "whatsapp image" goes before "image" and "dscn" before "dsc"
+    const PREFIXES: &[&str] = &[
+        "whatsapp image", "screen shot", "screenshot", "telegram", "picsart", "capture", "edited",
+        "signal", "mvimg", "image", "photo", "dscn", "dscf", "scan", "img", "dsc", "pxl", "pic",
+    ];
+    let mut name = stem.to_lowercase().replace(['_', '-', '.', '(', ')'], " ");
+    for p in PREFIXES {
+        name = name.replace(p, " ");
+    }
+    let letters = name.chars().filter(|c| c.is_alphabetic()).count();
+    letters < 3
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn camera_names_say_nothing_and_real_names_do() {
+        for n in ["IMG_0412", "DSC01234", "PXL_20260102_101010123", "Screenshot 2026-01-02 101010", "WhatsApp Image 2026-01-02 at 10.10.10", "a1", "0001"] {
+            assert!(camera_name(n), "{n} should count as a camera name");
+        }
+        for n in ["vent_diagram", "kitchen floor plan", "IMG_0412 passport", "receipt", "Screenshot of the error"] {
+            assert!(!camera_name(n), "{n} should count as a real name");
+        }
+    }
+
     use super::*;
 
     #[test]

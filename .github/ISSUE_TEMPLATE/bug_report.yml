@@ -18,7 +18,7 @@ body:
     attributes:
       label: Recall version
       description: Shown at the bottom of Settings.
-      placeholder: "2.1.1"
+      placeholder: "2.1.2"
     validations:
       required: true
   - type: input

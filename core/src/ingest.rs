@@ -402,7 +402,8 @@ fn ingest_file(
         let _ = db::setting_del(db, READING);
     }
     let ex = ex?;
-    if m.rules().skip_textless_images && ex.kind == "image" && ex.units.iter().map(|u| u.text.trim().len()).sum::<usize>() < 20 {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    if m.rules().skip_textless_images && ex.kind == "image" && crate::rules::camera_name(stem) {
         drop_file(db, index, path);
         return Ok(0);
     }

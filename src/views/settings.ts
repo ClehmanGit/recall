@@ -80,7 +80,7 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
             ${sw("r-hidden", r.skip_hidden, "Hidden files and folders")}
             ${sw("r-packages", r.skip_packages, "Installers and archives")}
             ${sw("r-media", r.skip_media, "Video and audio")}
-            ${sw("r-textless", r.skip_textless_images, "Pictures with no readable text")}
+            ${sw("r-textless", r.skip_textless_images, "Pictures named like IMG_0412.jpg")}
             <div class="row"><span class="rt">Files larger than</span>
               <select id="r-max" class="select">${SIZES.map((mb) => `<option value="${mb}" ${mb === r.max_mb ? "selected" : ""}>${mb ? `${mb} MB` : "No limit"}</option>`).join("")}</select></div>
           </div>

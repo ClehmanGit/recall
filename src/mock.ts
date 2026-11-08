@@ -94,7 +94,7 @@ if (new URLSearchParams(location.search).has("empty")) {
 
 const handlers: Record<string, Handler> = {
   status: () => ({
-    version: "2.1.1", chunks: 18402 + done * 7, items: items.length + Math.floor(done / 2), embedder_ready: true, model: "bge-small-en-v1.5",
+    version: "2.1.2", chunks: 18402 + done * 7, items: items.length + Math.floor(done / 2), embedder_ready: true, model: "bge-small-en-v1.5",
     sources, platforms: items.length ? [["claude", 1284], ["gemini", 312], ["chatgpt", 97]] : [],
     platform_enabled: platformEnabled, queued, done, current, feedback_enabled: true, connections,
   }),

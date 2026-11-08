@@ -1,7 +1,8 @@
 [package]
 name = "recall"
-version = "2.1.1"
+version = "2.1.2"
 edition = "2021"
+license = "MIT"
 description = "Local semantic search across AI chats and your files."
 
 [lib]

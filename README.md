@@ -62,7 +62,7 @@ Click a result to open the file at the right page, or the chat in your browser. 
 | Pictures | PNG, JPG, GIF, WebP and more, found by file name |
 | Chats | Claude, ChatGPT, Gemini |
 
-By default Recall skips program folders, code projects, installers and archives, video and audio, and pictures whose names are too short to search by (such as `IMG_0412.jpg`). Change this in **Settings › What to skip**. To drop a single result, hover over it and click **Hide**. **Settings › Hidden items** brings it back.
+By default Recall skips program folders, code projects, installers and archives, video and audio, and pictures named only by a camera or a number, such as `IMG_0412.jpg` or `Screenshot 2026-01-02.png`, since a picture is found by its name. Change this in **Settings › What to skip**. To drop a single result, hover over it and click **Hide**. **Settings › Hidden items** brings it back.
 
 ## Privacy
 
@@ -75,15 +75,14 @@ How each of these is enforced is described in [How Recall works](docs/how-it-wor
 
 ## Your data
 
-Recall keeps everything in one folder, `%LOCALAPPDATA%\Recall`.
+Recall keeps its index and settings in `%LOCALAPPDATA%\Recall`, and the chat sign-ins in `%LOCALAPPDATA%\app.recall.desktop`.
 
 | To | Do this |
 | --- | --- |
 | See how much space it uses | **Settings › Storage** |
 | Start the index over | **Settings › Storage › Rebuild index**. Your folders and settings are kept. |
 | Stop copying one chat app | **Settings › Chat apps › Disconnect**. This signs you out of that app inside Recall. |
-| Remove Recall | **Windows Settings › Apps › Installed apps › Recall › Uninstall**. Tick **Delete the application data** to remove the chat sign-ins too. |
-| Remove the index too | After uninstalling, delete the `%LOCALAPPDATA%\Recall` folder. |
+| Remove Recall and everything it stored | **Windows Settings › Apps › Installed apps › Recall › Uninstall**. This removes the index, settings and chat sign-ins too. Your own files are not touched. |
 
 ## Known limitations
 
@@ -103,3 +102,7 @@ Recall is a [Tauri 2](https://tauri.app) app: a Rust engine (`core/`) with a Typ
 
 - [Development](docs/development.md): building, testing and releasing
 - [How Recall works](docs/how-it-works.md): indexing, search, chat backup and the security model
+
+## License
+
+[MIT](LICENSE)

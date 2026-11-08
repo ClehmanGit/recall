@@ -16,7 +16,7 @@ Each item is split into **chunks** of text. A chunk keeps a **locator** that sho
 
 ### Rules
 
-**Settings › What to skip** is a set of switches applied the same way by the sweep and the file watcher (`core/src/rules.rs`): program and build folders, code projects (any folder with `.git`, `package.json`, `Cargo.toml` and similar), pictures whose names are too short to search by, hidden files, installers and archives, video and audio, a size limit, folders picked to skip, file types to include, and whether to follow shortcuts. A line under the switches shows how many files the current settings keep and skip.
+**Settings › What to skip** is a set of switches applied the same way by the sweep and the file watcher (`core/src/rules.rs`): program and build folders, code projects (any folder with `.git`, `package.json`, `Cargo.toml` and similar), pictures named only by a camera or a number (`IMG_0412.jpg`; see `rules::camera_name`), hidden files, installers and archives, video and audio, a size limit, folders picked to skip, file types to include, and whether to follow shortcuts. A line under the switches shows how many files the current settings keep and skip.
 
 ### Hiding one item
 
@@ -90,3 +90,5 @@ Everything lives in `%LOCALAPPDATA%\Recall`:
 The sign-in windows keep their cookies in WebView2's profile under `%LOCALAPPDATA%\app.recall.desktop`.
 
 **Settings › Storage** shows sizes. **Rebuild index** drops items, chunks and vectors and reads everything again, keeping sources, rules and hidden items.
+
+**Uninstalling** removes both folders (`src-tauri/nsis/hooks.nsh`). The program is installed into `%LOCALAPPDATA%\Recall` by default too, and an update runs the old uninstaller first, so the hook does nothing during an update; only a real uninstall removes data.

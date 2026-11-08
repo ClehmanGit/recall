@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2 (November 8, 2026)
+
+- Uninstalling Recall now removes everything it stored: the search index, settings, log and chat sign-ins. Your own files are not touched. Updating keeps everything, as before.
+- The picture rule in **Settings › What to skip** now does what it says: it skips pictures named only by a camera or a number, such as `IMG_0412.jpg` or `Screenshot 2026-01-02.png`. Before, it skipped every picture with a name shorter than 20 characters, so pictures like `floor_plan.png` were left out. They are now found by name.
+- Recall is now open source under the MIT license.
+
 ## 2.1.1 (November 8, 2026)
 
 ### Search

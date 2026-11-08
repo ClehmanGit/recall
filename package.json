@@ -1,7 +1,8 @@
 {
   "name": "recall",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "private": true,
+  "license": "MIT",
   "description": "Local semantic search across AI chats and your files.",
   "type": "module",
   "scripts": {
