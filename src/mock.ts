@@ -154,7 +154,7 @@ const handlers: Record<string, Handler> = {
   // app events (sign-in finished): nothing fires in the browser, but listening must not throw
   "plugin:event|listen": () => 0,
   "plugin:event|unlisten": () => undefined,
-  "plugin:dialog|open": () => ["C:/Users/you/Documents"],
+  pick_folders: () => ["C:/Users/you/Documents"],
   open_item: ({ itemId }) => { const i = items.find((x) => x.id === itemId); if (i?.uri.startsWith("https://")) window.open(i.uri, "_blank"); else console.info("open", i?.uri); },
   reveal_item: ({ itemId }) => { console.info("reveal", items.find((x) => x.id === itemId)?.uri); },
 };

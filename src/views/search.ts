@@ -1,7 +1,6 @@
 // Search view: field with recents dropdown, filters, result cards. Star, hide and open on a card
 // are handled by ../actions like everywhere else; this file grows cards and keeps them in sync.
 
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type Card, type Hit, type Item } from "../api";
 import { openNative, openViewer } from "./viewer";
 import { $, esc, badge, metaLine, hitBody, toast, shortPath, fmtDate, PLATFORM_LABEL } from "../ui";
@@ -288,8 +287,7 @@ document.querySelectorAll<HTMLButtonElement>(".filters .chip[data-kind]").forEac
 
 /// `onPicked` fires the moment folders are chosen, before they are registered, so the UI can show it is busy.
 export async function pickFolders(onPicked?: () => void): Promise<string[]> {
-  const picked = await openDialog({ directory: true, multiple: true, title: "Choose folders for Recall" });
-  const list = Array.isArray(picked) ? picked : picked ? [picked] : [];
+  const list = await api.pickFolders("source");
   if (list.length) onPicked?.();
   for (const p of list) await api.addSource(p);
   return list;

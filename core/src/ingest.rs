@@ -29,24 +29,32 @@ pub enum Job {
     Save,
 }
 
-/// One conversation as a sign-in window's reader sends it.
+/// One conversation as a sign-in window's reader sends it. The page is not
+/// trusted: the app sets `platform` and `url` itself and checks the rest
+/// before this reaches the worker (`connect::clean` in the app).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatPayload {
+    #[serde(default)]
     pub platform: String, // claude | gemini | chatgpt
     pub id: String,
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub title: String,
+    #[serde(default)]
     pub url: String,
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub updated_at: String, // RFC3339
     pub messages: Vec<ChatMessage>,
-    #[serde(default)]
-    pub attachments: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: Option<String>,
-    pub role: String,
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub text: String,
+}
+
+fn null_as_empty<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(d)?.unwrap_or_default())
 }
 
 /// Progress counters the UI polls. `queued` counts file and chat jobs handed to the
@@ -371,8 +379,7 @@ fn ingest_chat(
     if !changed {
         return Ok(0);
     }
-    // Each message is a unit. Role is kept out of the card (you decided that) but
-    // stays in the anchor so a click can deep-link to the exact message.
+    // each message is a unit; its id is the anchor, so a click opens that message
     let units = p
         .messages
         .into_iter()
