@@ -144,4 +144,3 @@ Settings › Data shows sizes; Rebuild index drops items and chunks and re-sweep
 - Importing a chat export file (the brief's Import route) is not built.
 - The installer is not code-signed, so Windows shows a SmartScreen warning ("More info", then "Run anyway").
 - OCR for images: the rule switch exists and the hook in `core/src/extract.rs::image` is behind the `ocr` feature with nothing behind it yet.
-- Vector backfill: chunks indexed before the model finished loading have FTS entries but no vectors until the next sweep touches them.
