@@ -2,7 +2,6 @@
 // webview can render it, passages from the index underneath, and the two ways
 // out: open in the program Windows uses for that file, or show it in its folder.
 
-import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, type Item } from "../api";
 import { $, esc, badge, metaLine, hitBody, toast } from "../ui";
 import { itemAttrs, actionButtons, onItemChange } from "../actions";
@@ -21,12 +20,10 @@ function assetUrlFor(path: string): string {
   return `http://asset.localhost/${encodeURI(path.replace(/\\/g, "/"))}`;
 }
 
-export async function openNative(it: Pick<Item, "uri" | "kind">, anchor?: string) {
+/** The app decides whether and how an item may be opened; the window only names it. */
+export async function openNative(it: Pick<Item, "id">, anchor?: string) {
   try {
-    if (it.uri.startsWith("http")) { await openUrl(anchor ? `${it.uri}#${anchor}` : it.uri); return; }
-    const path = filePath(it.uri);
-    if (it.kind === "pdf" && anchor) { await openUrl(`file:///${path}#page=${anchor}`); return; }
-    await openPath(path);
+    await api.openItem(it.id, anchor);
   } catch (e) {
     toast(`Could not open. ${e}`);
   }
@@ -82,7 +79,7 @@ dlg.addEventListener("close", () => { current = null; $("#v-body").innerHTML = "
 $("#v-open").addEventListener("click", () => { if (current) openNative(current); });
 $("#v-reveal").addEventListener("click", async () => {
   if (!current) return;
-  try { await revealItemInDir(filePath(current.uri)); } catch (e) { toast(`Could not show the folder. ${e}`); }
+  try { await api.revealItem(current.id); } catch (e) { toast(`Could not show the folder. ${e}`); }
 });
 $("#v-body").addEventListener("click", (e) => {
   const hit = (e.target as HTMLElement).closest<HTMLElement>(".hit");

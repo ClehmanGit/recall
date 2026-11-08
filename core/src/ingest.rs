@@ -1,6 +1,6 @@
 //! Ingest worker. One background thread owns the embedder and the index; everything
 //! else sends it jobs. Files arrive from the watcher or a sweep; chats arrive from
-//! the bridge server. Identity for files is (device, inode) hashed, so a rename or
+//! the sign-in windows. Identity for files is (device, inode) hashed, so a rename or
 //! move keeps the item and a content change re-embeds it.
 
 use crate::chunk::{self, Unit};
@@ -29,7 +29,7 @@ pub enum Job {
     Save,
 }
 
-/// What the extension bridge sends for one conversation.
+/// One conversation as a sign-in window's reader sends it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatPayload {
     pub platform: String, // claude | gemini | chatgpt

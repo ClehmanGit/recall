@@ -1,8 +1,9 @@
 //! Tauri shell: wires the window to recall-core.
 
 mod connect;
+mod open;
 
-use recall_core::{bridge, db, feedback, ingest, rules::Rules, search, Engine};
+use recall_core::{db, feedback, ingest, rules::Rules, search, Engine};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
@@ -29,8 +30,6 @@ pub struct Status {
     pub embedder_ready: bool,
     pub model: String,
     pub dim: usize,
-    pub bridge_port: u16,
-    pub token: String,
     pub sources: Vec<db::SourceRow>,
     pub platforms: Vec<(String, i64)>,
     pub platform_enabled: std::collections::HashMap<String, bool>,
@@ -62,8 +61,6 @@ async fn status(app: State<'_, Engine>, conns: State<'_, connect::Connections>) 
         embedder_ready: app.ingest.embedder.lock().is_some(),
         model,
         dim,
-        bridge_port: bridge::PORT,
-        token: app.token.clone(),
         sources: db::list_sources(&app.db).map_err(err)?,
         platforms: db::platform_counts(&app.db).map_err(err)?,
         platform_enabled: db::setting_get(&app.db, "platform_enabled").map_err(err)?.unwrap_or_default(),
@@ -444,10 +441,11 @@ pub fn run() {
             data_info,
             reset_index,
             send_feedback,
+            open::open_item,
+            open::reveal_item,
             connect::connect_platform,
             connect::sync_platform,
             connect::disconnect_platform,
-            connect::connect_cursor,
             connect::connect_known,
             connect::connect_ingest,
             connect::connect_progress,

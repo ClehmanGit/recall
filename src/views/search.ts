@@ -206,12 +206,6 @@ q.addEventListener("keydown", (e) => {
   }
 });
 
-// ---- open ----
-
-export async function openItem(uri: string, kind: string, anchor?: string) {
-  await openNative({ uri, kind }, anchor);
-}
-
 function asItem(c: Card): Item {
   return { id: c.item_id, kind: c.kind, source: c.source, ident: "", title: c.title, location: c.location, uri: c.uri,
     modified_at: c.modified_at, size_label: c.size_label, size_num: 0, missing: false, starred: c.starred };
@@ -224,18 +218,17 @@ results.addEventListener("click", async (e) => {
   const card = t.closest<HTMLElement>(".card");
   if (!card) return;
   const id = Number(card.dataset.id);
-  const uri = card.dataset.uri!;
   const kind = card.dataset.kind!;
 
   if (card.classList.contains("line")) { const k = cards.get(id); if (k) openViewer(asItem(k)); return; }
-  if (t.closest(".title")) { e.preventDefault(); await openItem(uri, kind); return; }
+  if (t.closest(".title")) { e.preventDefault(); await openNative({ id }); return; }
 
   const more = t.closest<HTMLButtonElement>(".more");
   if (more) { await growCard(card, more, id); return; }
 
   const hit = t.closest<HTMLElement>(".hit");
   if (hit) {
-    if (hit.classList.contains("open")) { await openItem(uri, kind, hit.dataset.anchor || undefined); return; }
+    if (hit.classList.contains("open")) { await openNative({ id }, hit.dataset.anchor || undefined); return; }
     const c = { kind, title: card.dataset.title! };
     card.querySelectorAll<HTMLElement>(".hit.open").forEach((h) => {
       h.classList.remove("open");

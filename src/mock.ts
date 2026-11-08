@@ -95,7 +95,7 @@ if (new URLSearchParams(location.search).has("empty")) {
 const handlers: Record<string, Handler> = {
   status: () => ({
     version: "2.0.0", chunks: 18402 + done * 7, items: items.length + Math.floor(done / 2), vectors: 18402, embedder_ready: true, model: "bge-small-en-v1.5", dim: 384,
-    bridge_port: 47617, token: "7f3a9c2e1b4d8e6f0a1b2c3d4e5f6a7b", sources, platforms: items.length ? [["claude", 1284], ["gemini", 312], ["chatgpt", 97]] : [],
+    sources, platforms: items.length ? [["claude", 1284], ["gemini", 312], ["chatgpt", 97]] : [],
     platform_enabled: platformEnabled, queued, done, current, feedback_enabled: true, data_dir: "C:/Users/you/AppData/Local/Recall", connections,
   }),
   search: ({ query }) => {
@@ -155,9 +155,8 @@ const handlers: Record<string, Handler> = {
   "plugin:event|listen": () => 0,
   "plugin:event|unlisten": () => undefined,
   "plugin:dialog|open": () => ["C:/Users/you/Documents"],
-  "plugin:opener|open_url": ({ url }) => { window.open(url, "_blank"); },
-  "plugin:opener|open_path": ({ path }) => { console.info("open", path); },
-  "plugin:opener|reveal_item_in_dir": ({ path }) => { console.info("reveal", path); },
+  open_item: ({ itemId }) => { const i = items.find((x) => x.id === itemId); if (i?.uri.startsWith("https://")) window.open(i.uri, "_blank"); else console.info("open", i?.uri); },
+  reveal_item: ({ itemId }) => { console.info("reveal", items.find((x) => x.id === itemId)?.uri); },
 };
 
 export function installMock() {

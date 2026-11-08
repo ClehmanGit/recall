@@ -1,6 +1,5 @@
 //! Recall engine. The Tauri shell and the probe binary both sit on top of this.
 
-pub mod bridge;
 pub mod chunk;
 pub mod feedback;
 pub mod rules;
@@ -22,7 +21,6 @@ pub struct Engine {
     pub index: index::VecIndex,
     pub ingest: ingest::Ingest,
     pub watch: Arc<Mutex<watch::Watch>>,
-    pub token: String,
     pub data_dir: PathBuf,
 }
 
@@ -41,8 +39,8 @@ pub fn boot(model_dir: PathBuf) -> Result<Engine> {
     )?));
     let ingest = ingest::start(db.clone(), index.clone(), model_dir);
     let watch = watch::start(ingest.tx.clone())?;
-    let token = load_or_create_token(&data_dir)?;
-    bridge::spawn(db.clone(), ingest.tx.clone(), token.clone(), ingest.progress.clone());
+    // left by versions that listened for a browser extension
+    let _ = std::fs::remove_file(data_dir.join("bridge.token"));
 
     // watching a large folder tree can take seconds; do it after the window is up
     {
@@ -56,19 +54,6 @@ pub fn boot(model_dir: PathBuf) -> Result<Engine> {
             }
         })?;
     }
-    Ok(Engine { db, index, ingest, watch, token, data_dir })
+    Ok(Engine { db, index, ingest, watch, data_dir })
 }
 
-fn load_or_create_token(dir: &Path) -> Result<String> {
-    let p = dir.join("bridge.token");
-    if let Ok(t) = std::fs::read_to_string(&p) {
-        let t = t.trim().to_string();
-        if t.len() >= 32 {
-            return Ok(t);
-        }
-    }
-    let seed = format!("{}{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
-    let t = blake3::hash(seed.as_bytes()).to_hex().to_string();
-    std::fs::write(&p, &t)?;
-    Ok(t)
-}

@@ -14,7 +14,7 @@ export interface RecentItem extends Item { indexed_at: string }
 export interface SourceRow { path: string; enabled: boolean; count: number }
 export interface Status {
   version: string; chunks: number; items: number; vectors: number; embedder_ready: boolean; model: string; dim: number;
-  bridge_port: number; token: string; sources: SourceRow[]; platforms: [string, number][];
+  sources: SourceRow[]; platforms: [string, number][];
   platform_enabled: Record<string, boolean>; queued: number; done: number; current: string;
   feedback_enabled: boolean; data_dir: string;
   connections: Record<string, Connection>;
@@ -45,6 +45,8 @@ export const api = {
   /** A page of items by modified date, newest first unless `oldest`. */
   browse: (kinds: string[], limit = 200, offset = 0, oldest = false) => invoke<Item[]>("browse", { kinds, limit, offset, oldest }),
   itemChunks: (itemId: number, limit = 40) => invoke<Chunk[]>("item_chunks", { itemId, limit }),
+  openItem: (itemId: number, anchor?: string) => invoke<void>("open_item", { itemId, anchor: anchor ?? null }),
+  revealItem: (itemId: number) => invoke<void>("reveal_item", { itemId }),
   setStar: (itemId: number, on: boolean) => invoke<void>("set_star", { itemId, on }),
   excludeItem: (itemId: number) => invoke<Item | null>("exclude_item", { itemId }),
   unexclude: (ident: string, uri: string, source: string) => invoke<void>("unexclude", { ident, uri, source }),

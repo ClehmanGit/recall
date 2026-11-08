@@ -264,7 +264,7 @@
         if (!batch.length) return;
         const out = batch.splice(0);
         sent += out.length;
-        await inv("connect_ingest", { platform, conversations: out, cursor: null });
+        await inv("connect_ingest", { platform, conversations: out });
       };
       const step = kind === "quick" ? QUICK_PARALLEL[platform] : 1;
       for (let i = 0; i < todo.length; i += step) {
