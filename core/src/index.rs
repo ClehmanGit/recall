@@ -19,7 +19,8 @@ impl VectorIndex {
         let opts = IndexOptions {
             dimensions: dim,
             metric: MetricKind::Cos,
-            quantization: ScalarKind::F32,
+            // half precision: half the memory and disk, no visible change in ranking
+            quantization: ScalarKind::F16,
             connectivity: 16,
             expansion_add: 128,
             expansion_search: 64,
