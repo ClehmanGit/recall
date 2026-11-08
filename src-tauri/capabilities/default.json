@@ -1,0 +1,73 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window capabilities",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-status",
+    "allow-search",
+    "allow-recent-queries",
+    "allow-clear-recent-queries",
+    "allow-remove-recent-query",
+    "allow-starred",
+    "allow-recently-indexed",
+    "allow-browse",
+    "allow-item-chunks",
+    "allow-set-star",
+    "allow-exclude-item",
+    "allow-unexclude",
+    "allow-list-excluded",
+    "allow-add-source",
+    "allow-remove-source",
+    "allow-set-source-enabled",
+    "allow-resync-source",
+    "allow-resync-all",
+    "allow-get-rules",
+    "allow-set-rules",
+    "allow-preview-rules",
+    "allow-set-platform-enabled",
+    "allow-data-info",
+    "allow-reset-index",
+    "allow-send-feedback",
+    "allow-connect-platform",
+    "allow-sync-platform",
+    "allow-disconnect-platform",
+    "allow-connect-cursor",
+    "allow-connect-ingest",
+    "allow-connect-report",
+    "core:default",
+    "dialog:allow-open",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://**"
+        },
+        {
+          "url": "http://**"
+        },
+        {
+          "url": "file://**"
+        }
+      ]
+    },
+    {
+      "identifier": "opener:allow-reveal-item-in-dir",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    }
+  ]
+}

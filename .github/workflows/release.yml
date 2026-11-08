@@ -1,0 +1,79 @@
+# Builds the Windows installer and attaches it to a GitHub Release.
+# Trigger: push a tag like v2.0.0. Nobody downloading Recall ever builds anything.
+#
+#   git tag v2.0.0
+#   git push origin v2.0.0
+#
+# Optional repository secrets:
+#   RECALL_FEEDBACK_URL   endpoint for the feedback button (omit to hide the button)
+#   WINDOWS_CERT_B64      base64 of a .pfx code-signing certificate
+#   WINDOWS_CERT_PASSWORD its password
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch embedding model
+        run: npm run model
+
+      - name: Import signing certificate
+        if: ${{ env.WINDOWS_CERT_B64 != '' }}
+        shell: pwsh
+        env:
+          WINDOWS_CERT_B64: ${{ secrets.WINDOWS_CERT_B64 }}
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_B64))
+          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$env:RUNNER_TEMP\cert.pfx" >> $env:GITHUB_ENV
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECALL_FEEDBACK_URL: ${{ secrets.RECALL_FEEDBACK_URL }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERT_B64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Recall ${{ github.ref_name }}"
+          releaseBody: "Download Recall-Setup.exe below and run it."
+          releaseDraft: false
+          prerelease: false
+          args: --bundles nsis
+
+      # The website links to releases/latest/download/Recall-Setup.exe, so every
+      # release also carries the installer under that fixed name.
+      - name: Attach Recall-Setup.exe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $exe = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          Copy-Item $exe.FullName "$env:RUNNER_TEMP/Recall-Setup.exe"
+          gh release upload "${{ github.ref_name }}" "$env:RUNNER_TEMP/Recall-Setup.exe" --clobber

@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "connect",
+  "description": "Sign-in windows for chat apps: the reader script talks to the app over the internal channel.",
+  "windows": [
+    "connect-*"
+  ],
+  "remote": {
+    "urls": [
+      "https://claude.ai/*",
+      "https://*.claude.ai/*",
+      "https://gemini.google.com/*",
+      "https://chatgpt.com/*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "allow-connect-cursor",
+    "allow-connect-known",
+    "allow-connect-ingest",
+    "allow-connect-progress",
+    "allow-connect-report"
+  ]
+}

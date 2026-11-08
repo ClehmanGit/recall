@@ -1,0 +1,157 @@
+# Recall v2
+
+Local semantic search across AI chats and your files. One search box, one ranked list, one card per thing. Nothing leaves the machine.
+
+```
+recall/
+├── core/          recall-core: ingest, rules, embed, index, search, localhost bridge. No UI dependency.
+│   └── src/bin/   probe: headless pipeline check
+├── src-tauri/     Tauri 2 shell (window, commands, bundling, models/)
+├── src/           frontend: vanilla TypeScript + Vite
+│   └── views/     search, home, getting started, gallery and timeline, quick view, settings
+├── extension/     Chrome MV3 bridge for Claude, Gemini, ChatGPT (alternative to signing in inside the app)
+├── site/          the one-page download website
+├── scripts/       fetch-model.mjs, update-installed.ps1
+└── assets/        mascot
+```
+
+## Shipping it
+
+Nobody who installs Recall builds it. `.github/workflows/release.yml` builds the installer on GitHub's Windows runner and attaches it to a Release whenever you push a version tag:
+
+```
+git tag v2.1.0
+git push origin v2.1.0
+```
+
+A few minutes later the Release page has the installer twice: `Recall_2.1.0_x64-setup.exe`, and the same file as `Recall-Setup.exe`, the fixed name the website links to. Bump the version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` before tagging. The installer runs per-user, no admin prompt. Add a code-signing certificate as repository secrets (`WINDOWS_CERT_B64`, `WINDOWS_CERT_PASSWORD`) to remove the SmartScreen warning for people who don't know you.
+
+## The download page
+
+`site/` is one page that fits on one screen: what Recall does, the download button, how to get past the Windows warning, and four privacy points, over a slow drift of files and chats (`site/drift.js`). The owl watches the pointer and the demo search types itself (`site/site.js`).
+
+It uses nothing from anywhere else: fonts, images and scripts are in `site/`, and a Content-Security-Policy in the page blocks everything else. No cookies, no analytics. The download button goes to `releases/latest/download/Recall-Setup.exe`, so a new release needs no change to the page. The version and installer size in its text are typed in; update them with a release.
+
+`.github/workflows/site.yml` swaps `REPLACE_ME/recall` for the repository's name and publishes `site/` to GitHub Pages, which serves it over HTTPS (enable Pages → Source: GitHub Actions in the repo settings once). To look at it locally: `python -m http.server 4321 --directory site`.
+
+## Windows setup (for building it yourself)
+
+Prerequisites, once:
+
+1. Rust: https://rustup.rs (MSVC toolchain; say yes to Visual Studio Build Tools, "Desktop development with C++").
+2. Node 20+: https://nodejs.org
+3. WebView2 is already on Windows 10/11.
+
+Then:
+
+```powershell
+npm install
+npm run model      # bge-small-en-v1.5 int8, ~33 MB, into src-tauri/models/ — ships inside the installer
+npm run dev        # builds the Rust side on first run (several minutes), then opens the window
+```
+
+`npm run build` produces installers under `target/release/bundle/` (`nsis/` and `msi/`). The model folder is bundled as a resource, so the installer is self-contained; no download on first launch.
+
+To ship a feedback endpoint: `$env:RECALL_FEEDBACK_URL="https://your.endpoint/feedback"; npm run build`. Without it the feedback button is hidden.
+
+### Updating your own installed copy
+
+`scripts/update-installed.ps1` builds the app, closes the running Recall, swaps in the new `recall.exe` and starts it again. Your library and settings are untouched; no reinstall.
+
+### UI in a plain browser
+
+`npm run web` serves the frontend on sample data (`src/mock.ts` stands in for the Tauri commands). Useful for motion and copy changes without a Rust build. Add `?empty` to the address to see an empty library and the Getting started guide.
+
+### Headless check without the window
+
+```powershell
+cd core
+cargo run --bin probe -- index C:\Users\you\Downloads
+cargo run --bin probe -- search "that paper about vents"
+cargo run --bin probe -- status
+```
+
+The probe looks for `./models/` relative to the working directory; run it from `src-tauri` or copy the folder.
+
+## Chats: sign in inside the app
+
+`+ Add sources › Claude / Gemini / ChatGPT`, Settings › Chat apps › Connect, or the Getting started guide opens a `WebviewWindow` labelled `connect-<platform>` on the platform's own site, with `src-tauri/connect/reader.js` as its initialization script. Recall never sees the password: the person signs in to the site itself.
+
+The script notices sign-in on its own, checking every 3 seconds for ten minutes, because some sign-ins (Claude's Google pop-up, a typed code) finish without a page load. Then the window hides, Recall comes forward and says what happens next, and the backup starts:
+
+- **Quick backup** first: recent and starred chats. It runs again every fifteen minutes.
+- **Full backup** of older chats, 50 at a time, only while the computer has been idle for five minutes or between 1 and 6 am, until every chat is in.
+
+The reader asks the app which chats it already has and when each changed (`connect_known`), so only new or changed chats are fetched, and reports progress (`connect_progress`) for the line under each app in Settings. If a site asks Recall to slow down for longer than 15 seconds, the run stops and that app pauses for 30 minutes. Batches arrive through `connect_ingest` and the result through `connect_report`; the `connect` capability exposes only these reader commands, to those sites only. Disconnect clears the window's browsing data. Connection state lives in the `connections` setting; the schedule is at the top of `src-tauri/src/connect.rs`.
+
+Every app command is listed in `build.rs` so Tauri generates `allow-<command>` permissions; `capabilities/default.json` grants all of them to the main window, `capabilities/connect.json` grants the three reader commands to the sign-in windows.
+
+## Chats: the extension bridge (alternative)
+
+1. `chrome://extensions` → Developer mode → Load unpacked → pick `extension/`.
+2. Settings › Platforms shows the app token (Copy). Paste it into the extension popup once.
+3. Click **Sync now**. After that it runs every 15 minutes.
+
+The bridge only talks to `127.0.0.1:47617`, and the app only accepts requests carrying that token. Each platform keeps a cursor, the newest `updated_at` the app has accepted, so a new conversation always arrives on the next sync even if the platform reorders its list. A platform switched off in Settings is acknowledged and dropped.
+
+If a platform shows **error** in the popup, that module's endpoint shape has drifted. Gemini is the one that moves; `extension/platforms/gemini.js` says where to look.
+
+## How it indexes
+
+Every item carries two axes that never get folded into the embedding:
+
+- **kind**: chat, pdf, document, spreadsheet, code, image, text
+- **source**: claude, gemini, chatgpt, or the folder you added
+
+Files are identified by device and inode (hashed), so a rename or move keeps the item; a content change re-chunks and re-embeds it. Chats are identified by platform and conversation id.
+
+Chunks keep a **locator** (`p.3`, `L44`, `turn 12`, `OCR`) so a card can show where a hit lives before you open it, and an **anchor** for the deep link on click. Chat and document chunks keep their markdown; the card renders headings, bold and lists.
+
+Search is hybrid: 0.72 vector cosine + 0.20 FTS5 keyword rank + 0.08 recency, grouped per item so one long chat can't flood the list. Weights are constants at the top of `core/src/search.rs`. While the model is still loading, search is keyword-only and the footer dot is amber.
+
+### Rules
+
+Settings › What to skip is a set of switches, saved as they change and applied identically in the sweep and the watcher (`core/src/rules.rs`): program and build folders, code projects (any folder with `.git`, `package.json`, `Cargo.toml` and the like; on by default), pictures with no text (on by default), hidden files, installers and archives, video and audio, a size cap, folders picked to skip, file types to include, OCR, and following shortcuts. The presets expand to concrete folder names and extensions in `rules.rs`. A line under the switches shows how many files the current settings keep and skip.
+
+Each sweep also prunes: anything in a folder the rules now skip, anything deleted, and duplicates of the same file leave the index. A folder on an unplugged drive is left alone.
+
+### Excluding one item
+
+Hover a result, press Hide. The item leaves the index and is recorded in `excluded` by identity, so a rename stays hidden; the file is not touched. Undo is on the toast, and Settings › Hidden items lists everything with Show again. The menu's second row opens What to skip with that file's folder added to the skip list.
+
+### Indexing
+
+Starts the moment a source is added. The first time, a notice explains that CPU use is high while it runs and returns to normal when it finishes; after that, a toast. Progress shows in the sidebar footer (`done / queued`, current file) and a toast marks completion. Search runs throughout. Chats go ahead of files in the queue, and a file that crashes its reader is skipped instead of stopping indexing.
+
+Closing the window keeps Recall running in the tray so folders and chats stay current; Quit is on the tray icon. Opening Recall again brings the running copy forward instead of starting a second one.
+
+## Model
+
+`src-tauri/models/model.json` names the model, its dimension, pooling (`cls` or `mean`) and query prefix; the engine reads it at boot and opens `vectors-<dim>.usearch`. `MODEL=qwen npm run model` fetches Qwen3-Embedding-0.6B instead (1024-dim, ~600 MB); then Settings › Data › Rebuild index.
+
+## Network
+
+Outbound connections: none. The bridge listens on 127.0.0.1 only. Fonts are bundled. Feedback, when a build has an endpoint, sends only on Send and carries only the text typed plus the app version and OS name (`core/src/feedback.rs`). No identifiers, no usage data, no telemetry from ONNX Runtime (pyke builds have it off).
+
+## Motion
+
+One curve (`--ease`), one tempo band (140–260 ms), defined once at the top of `src/style.css`. Cards rise with a 30 ms stagger on a new query only; same-query refreshes stay still. Hits expand in place. Menus, dropdowns and dialogs fade with a small pop; dialogs use `@starting-style` so the close fades too. Everything is off under `prefers-reduced-motion`.
+
+## Data
+
+`%LOCALAPPDATA%\Recall\`
+- `recall.sqlite` — items, chunks, FTS index, sources, rules, exclusions, cursors, settings
+- `vectors-384.usearch` — HNSW index, keyed by chunk id
+- `bridge.token`
+- `recall.log`: what Recall did, for troubleshooting; starts over past 2 MB
+
+Settings › Data shows sizes; Rebuild index drops items and chunks and re-sweeps, keeping sources, rules and exclusions.
+
+## Not done yet
+
+- Importing a chat export file (the brief's Import route) is not built.
+- The installer is not code-signed, so Windows shows a SmartScreen warning ("More info", then "Run anyway").
+
+- OCR for images: the rule switch exists and the hook in `core/src/extract.rs::image` is behind the `ocr` feature with nothing behind it yet.
+- Vector backfill: chunks indexed before the model finished loading have FTS entries but no vectors until the next sweep touches them.
+- Gallery image thumbnails use the Tauri asset protocol (scope `**` in tauri.conf.json); tighten the scope to the chosen folders before shipping.

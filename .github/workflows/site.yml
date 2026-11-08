@@ -1,0 +1,32 @@
+# Publishes site/ to GitHub Pages: one static page with its own fonts and images,
+# nothing loaded from anywhere else. Pages serves it over HTTPS.
+# The download button points at the newest release's Recall-Setup.exe
+# (see release.yml), so a new version needs no change here.
+name: site
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: ${{ steps.deploy.outputs.page_url }} }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Point the links at this repository
+        run: sed -i "s#REPLACE_ME/recall#${GITHUB_REPOSITORY}#g" site/index.html
+      - name: Stamp the style and script links so visitors never get a stale copy
+        run: sed -i -E "s#\?v=[^\"]*#?v=${GITHUB_SHA::8}#g" site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+      - id: deploy
+        uses: actions/deploy-pages@v4
