@@ -100,7 +100,7 @@ On Windows a file is identified by a hash of its path, creation time and attribu
 
 Chunks keep a **locator** (`p.3`, `L44`, `turn 12`, `Sheet1`) so a card can show where a hit lives before you open it, and an **anchor** for the deep link on click. Chat and document chunks keep their markdown; the card renders headings, bold and lists.
 
-Search is hybrid: 0.72 vector cosine + 0.20 FTS5 keyword rank + 0.08 recency, grouped per item so one long chat can't flood the list. Weights are constants at the top of `core/src/search.rs`. While the model is still loading, search is keyword-only; anything read in that time is read again once the model loads.
+Search is hybrid: 0.72 vector cosine + 0.20 FTS5 keyword rank + 0.08 recency, grouped per item so one long chat can't flood the list. Weights are constants at the top of `core/src/search.rs`. While the model is still loading, search is keyword-only. Once it loads, a backfill embeds any stored passage that has no vector yet, a slice at a time behind other work, so nothing is read or downloaded again.
 
 ### Rules
 

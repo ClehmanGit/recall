@@ -295,8 +295,14 @@
         : failed ? `${failed} of ${todo.length} chats could not be read (${(lastError && lastError.message) || lastError}); they are tried again next time` : null;
       await inv("connect_report", { platform, signedIn: true, synced: sent, error, pass: kind, total, remaining });
     } catch (e) {
-      const signedIn = await mod.signedIn();
-      await inv("connect_report", { platform, signedIn, synced: sent, error: String((e && e.message) || e), pass: kind, total: null, remaining: null });
+      // a network failure (offline, asleep, the site down) says nothing about the
+      // sign-in; reporting it as signed out would stop backups until someone
+      // clicked Sign in again
+      const message = String((e && e.message) || e);
+      const offline = !navigator.onLine || (e instanceof TypeError && /fetch|network/i.test(message));
+      const signedIn = offline || (await mod.signedIn());
+      const error = offline ? `could not reach the site (${message}); Recall tries again next time` : message;
+      await inv("connect_report", { platform, signedIn, synced: sent, error, pass: kind, total: null, remaining: null });
     } finally {
       running = null;
     }

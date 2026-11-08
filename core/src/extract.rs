@@ -269,3 +269,48 @@ pub fn human_bytes(n: u64) -> String {
         format!("{:.1} GB", f / K / K / K)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    fn zip_at(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(format!("recall-{}-{name}", std::process::id()));
+        let mut z = zip::ZipWriter::new(std::fs::File::create(&p).unwrap());
+        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for (n, body) in files {
+            z.start_file(*n, opts).unwrap();
+            z.write_all(body.as_bytes()).unwrap();
+        }
+        z.finish().unwrap();
+        p
+    }
+
+    #[test]
+    fn a_zip_with_too_many_parts_is_refused_before_reading() {
+        let names: Vec<String> = (0..20_001).map(|i| format!("f{i}")).collect();
+        let files: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), "")).collect();
+        let p = zip_at("many.docx", &files);
+        assert!(zip_ok(&p).is_err());
+        assert!(extract(&p).is_err());
+        let _ = std::fs::remove_file(p);
+    }
+
+    #[test]
+    fn far_apart_cells_do_not_size_a_giant_grid() {
+        // A1 and XFD1048576: loading the sheet as a grid would ask for ~17 billion cells
+        let p = zip_at("far.xlsx", &[
+            ("[Content_Types].xml", r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#),
+            ("_rels/.rels", r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#),
+            ("xl/workbook.xml", r#"<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>"#),
+            ("xl/_rels/workbook.xml.rels", r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#),
+            ("xl/worksheets/sheet1.xml", r#"<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>first</t></is></c></row><row r="1048576"><c r="XFD1048576" t="inlineStr"><is><t>last</t></is></c></row></sheetData></worksheet>"#),
+        ]);
+        let ex = extract(&p).expect("reads cell by cell");
+        assert_eq!(ex.size_num, 2);
+        assert_eq!(ex.units[0].text, "first\nlast");
+        let _ = std::fs::remove_file(p);
+    }
+}
