@@ -1,6 +1,6 @@
 // Every command gets an `allow-<command>` permission so the capabilities can say
-// which window may call it: the main window gets all of them, the sign-in
-// windows only the three the reader script needs.
+// which window may call it: the main window gets its own commands, the sign-in
+// windows only the four the reader script needs.
 fn main() {
     let attributes = tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
         "status",

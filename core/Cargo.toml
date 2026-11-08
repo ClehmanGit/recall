@@ -45,6 +45,3 @@ zip = { version = "4", default-features = false } # only to read a zip's table o
 default = ["ort-download"]
 # default: fetch a prebuilt onnxruntime at build time
 ort-download = ["ort/download-binaries", "ort/tls-rustls"]
-# alternative: link against an onnxruntime.dll/.so you ship yourself (set ORT_DYLIB_PATH at runtime)
-ort-dynamic = ["ort/load-dynamic"]
-ocr = []

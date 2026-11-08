@@ -4,7 +4,7 @@
 // Adding folders and connecting chat apps live in main.ts; this asks for them by event.
 
 import { api, type Status } from "../api";
-import { esc, shortPath, assetUrl, PLATFORM_MARK, PLATFORM_LABEL } from "../ui";
+import { esc, shortPath, assetUrl, PLATFORMS, PLATFORM_MARK, PLATFORM_LABEL } from "../ui";
 
 const CHECK = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
 
@@ -25,7 +25,7 @@ function step(n: number, done: boolean, title: string, body: string): string {
 
 function guideHtml(s: Status, standalone: boolean): string {
   const folders = s.sources.filter((x) => x.enabled);
-  const chats = ["claude", "chatgpt", "gemini"];
+  const chats = PLATFORMS;
   const anyChat = chats.some((p) => connected(s, p));
 
   const folderBody = `
@@ -61,7 +61,7 @@ function guideHtml(s: Status, standalone: boolean): string {
 
   return `<div class="guide ${standalone ? "standalone" : ""}">
     <header class="guide-head">
-      <img src="/assets/owl.png" alt="" width="44" height="44">
+      <img src="${assetUrl("owl.png")}" alt="" width="44" height="44">
       <div><h1>Getting started</h1><p>Recall searches your files and chats by what they say, not just their names.</p></div>
     </header>
     ${step(1, folders.length > 0, "Choose folders to search", folderBody)}

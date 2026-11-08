@@ -16,6 +16,8 @@ pub type Db = Arc<Mutex<Connection>>;
 
 const SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
+-- deleted text is overwritten on disk, not just unlinked
+PRAGMA secure_delete = ON;
 PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
 
@@ -195,10 +197,12 @@ pub fn upsert_item(db: &Db, item: &NewItem) -> Result<(i64, bool)> {
     }
 }
 
-/// Replaces an item's chunks. Returns the new chunk ids in order.
-pub fn replace_chunks(db: &Db, item_id: i64, chunks: &[NewChunk]) -> Result<Vec<i64>> {
+/// Replaces an item's chunks. Returns the old chunk ids (whose vectors must go)
+/// and the new ones in order.
+pub fn replace_chunks(db: &Db, item_id: i64, chunks: &[NewChunk]) -> Result<(Vec<i64>, Vec<i64>)> {
     let mut conn = db.lock();
     let tx = conn.transaction()?;
+    let old = chunk_ids_where(&tx, "item_id = ?1", params![item_id])?;
     tx.execute("DELETE FROM chunks WHERE item_id = ?1", params![item_id])?;
     let mut ids = Vec::with_capacity(chunks.len());
     {
@@ -215,7 +219,7 @@ pub fn replace_chunks(db: &Db, item_id: i64, chunks: &[NewChunk]) -> Result<Vec<
         params![item_id, Utc::now().to_rfc3339()],
     )?;
     tx.commit()?;
-    Ok(ids)
+    Ok((old, ids))
 }
 
 /// The stored content hash of an item; None if unknown or never fully embedded.
@@ -301,12 +305,6 @@ fn sanitize_fts(q: &str) -> String {
         .join(" OR ")
 }
 
-pub fn all_chunk_ids_with_item(db: &Db) -> Result<Vec<(i64, i64)>> {
-    let conn = db.lock();
-    let mut stmt = conn.prepare("SELECT id, item_id FROM chunks")?;
-    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
-    Ok(rows.filter_map(|r| r.ok()).collect())
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceRow {
@@ -346,10 +344,16 @@ pub fn file_items(db: &Db, source: &str) -> Result<Vec<(i64, String, String)>> {
 /// Takes one item out of the index (its passages go with it) and returns the
 /// passage ids, so their vectors can be dropped too. Unlike exclude_item it is
 /// not remembered: if the rules allow the file again, it comes back.
+fn chunk_ids_where(conn: &Connection, filter: &str, args: impl rusqlite::Params) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare(&format!("SELECT id FROM chunks WHERE {filter}"))?;
+    let ids = stmt.query_map(args, |r| r.get(0))?.filter_map(|r| r.ok()).collect();
+    Ok(ids)
+}
+
+/// Deletes the item; returns its chunk ids, whose vectors must go too.
 pub fn remove_item(db: &Db, item_id: i64) -> Result<Vec<i64>> {
     let conn = db.lock();
-    let mut stmt = conn.prepare("SELECT id FROM chunks WHERE item_id = ?1")?;
-    let chunks: Vec<i64> = stmt.query_map(params![item_id], |r| r.get(0))?.filter_map(|r| r.ok()).collect();
+    let chunks = chunk_ids_where(&conn, "item_id = ?1", params![item_id])?;
     conn.execute("DELETE FROM items WHERE id = ?1", params![item_id])?;
     Ok(chunks)
 }
@@ -358,11 +362,14 @@ pub fn item_id_by_ident(db: &Db, ident: &str) -> Result<Option<i64>> {
     Ok(db.lock().query_row("SELECT id FROM items WHERE ident = ?1", params![ident], |r| r.get(0)).optional()?)
 }
 
-pub fn remove_source(db: &Db, path: &str) -> Result<()> {
+/// Forgets a folder and everything read from it; returns the chunk ids whose
+/// vectors must go too.
+pub fn remove_source(db: &Db, path: &str) -> Result<Vec<i64>> {
     let conn = db.lock();
+    let chunks = chunk_ids_where(&conn, "item_id IN (SELECT id FROM items WHERE source = ?1)", params![path])?;
     conn.execute("DELETE FROM sources WHERE path = ?1", params![path])?;
     conn.execute("DELETE FROM items WHERE source = ?1", params![path])?;
-    Ok(())
+    Ok(chunks)
 }
 
 pub fn platform_counts(db: &Db) -> Result<Vec<(String, i64)>> {
@@ -455,7 +462,7 @@ const ITEM_COLS: &str = "id, kind, source, ident, title, location, uri, modified
 /// back on brings them back at once, but they are left out of search and lists.
 pub fn hidden_platforms(db: &Db) -> Vec<String> {
     let enabled: std::collections::HashMap<String, bool> = setting_get(db, "platform_enabled").ok().flatten().unwrap_or_default();
-    ["claude", "gemini", "chatgpt"].into_iter().filter(|p| enabled.get(*p) == Some(&false)).map(String::from).collect()
+    crate::PLATFORMS.into_iter().filter(|p| enabled.get(*p) == Some(&false)).map(String::from).collect()
 }
 
 /// ` AND source NOT IN (...)` for the hidden chat apps. The names come from a fixed list.
@@ -517,17 +524,20 @@ pub fn set_star(db: &Db, item_id: i64, on: bool) -> Result<()> {
 }
 
 /// Removes the item and records the exclusion so sweeps and syncs skip it.
-pub fn exclude_item(db: &Db, item_id: i64) -> Result<Option<Item>> {
+/// Returns the item and its chunk ids, whose vectors must go too.
+pub fn exclude_item(db: &Db, item_id: i64) -> Result<(Option<Item>, Vec<i64>)> {
     let item = get_item(db, item_id)?;
+    let mut chunks = Vec::new();
     if let Some(it) = &item {
         let conn = db.lock();
+        chunks = chunk_ids_where(&conn, "item_id = ?1", params![item_id])?;
         conn.execute(
             "INSERT OR REPLACE INTO excluded (ident, label, kind, at) VALUES (?1, ?2, ?3, ?4)",
             params![it.ident, if it.kind == "chat" { it.title.clone() } else { it.uri.trim_start_matches("file:///").to_string() }, it.kind, Utc::now().to_rfc3339()],
         )?;
         conn.execute("DELETE FROM items WHERE id = ?1", params![item_id])?;
     }
-    Ok(item)
+    Ok((item, chunks))
 }
 
 pub fn unexclude(db: &Db, ident: &str) -> Result<()> {
@@ -588,7 +598,15 @@ pub fn item_count(db: &Db) -> Result<i64> {
 pub fn clear_index(db: &Db) -> Result<()> {
     let conn = db.lock();
     conn.execute_batch("DELETE FROM chunks; DELETE FROM items;")?;
+    drop(conn);
+    shrink(db);
     Ok(())
+}
+
+/// After a hide or removal: fold the write-ahead log back in and truncate it,
+/// so deleted text does not linger in it.
+pub fn shrink(db: &Db) {
+    let _ = db.lock().execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
 }
 
 #[cfg(test)]

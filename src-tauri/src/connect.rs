@@ -13,7 +13,7 @@
 //! Both read only chats Recall does not hold yet or that changed (`connect_known`).
 
 use parking_lot::Mutex;
-use recall_core::{db, ingest::{ChatPayload, Job}, Engine};
+use recall_core::{db, ingest::{ChatPayload, Job}, Engine, PLATFORMS};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -35,7 +35,6 @@ const NIGHT: std::ops::Range<u32> = 1..6;
 /// After a site answers 429 (too many requests), wait this long.
 const PAUSE_AFTER_REFUSAL: Duration = Duration::from_secs(30 * 60);
 
-pub const PLATFORMS: [&str; 3] = ["claude", "gemini", "chatgpt"];
 
 fn start_url(platform: &str) -> &'static str {
     match platform {
@@ -67,7 +66,6 @@ pub struct Connection {
     pub state: String,
     pub last_sync: Option<String>,
     pub last_error: Option<String>,
-    pub synced: usize,
     /// "quick" | "full" while a backup runs
     #[serde(default)]
     pub pass: Option<String>,
@@ -192,7 +190,7 @@ fn ensure_window(app: &AppHandle, platform: &str, show: bool) -> Result<tauri::W
         if show { let _ = w.show(); let _ = w.set_focus(); }
         return Ok(w);
     }
-    let url: tauri::Url = start_url(platform).parse().map_err(|e| format!("{e}"))?;
+    let url: tauri::Url = start_url(platform).parse().map_err(crate::err)?;
     let p = platform.to_string();
     info!("{platform}: opening sign-in window (visible={show})");
     WebviewWindowBuilder::new(app, label(platform), WebviewUrl::External(url))
@@ -231,7 +229,7 @@ pub async fn sync_platform(app: AppHandle, engine: tauri::State<'_, Engine>, con
     valid(&platform)?;
     conns.update(&engine, &platform, |c| c.paused_until = None);
     let w = ensure_window(&app, &platform, false)?;
-    w.eval("window.__recall && window.__recall.quick()").map_err(|e| e.to_string())
+    w.eval("window.__recall && window.__recall.quick()").map_err(crate::err)
 }
 
 /// Closes the window, clears its cookies, and forgets the connection. Indexed
@@ -279,7 +277,7 @@ fn sign_out(app: &AppHandle, platform: &str) {
 #[tauri::command]
 pub async fn connect_known(window: tauri::WebviewWindow, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String) -> Result<HashMap<String, String>, String> {
     own(&window, &platform)?;
-    let mut known = db::chat_versions(&engine.db, &platform).map_err(|e| e.to_string())?;
+    let mut known = db::chat_versions(&engine.db, &platform).map_err(crate::err)?;
     if let Some(queued) = conns.1.lock().get(&platform) {
         for (id, at) in queued {
             known.entry(id.clone()).or_insert_with(|| at.clone());
@@ -442,7 +440,6 @@ pub async fn connect_report(
                 c.stage = None;
                 c.last_error = error.clone();
                 c.last_sync = Some(chrono::Utc::now().to_rfc3339());
-                c.synced = synced;
                 if total.is_some() { c.total = total; }
                 if remaining.is_some() { c.remaining = remaining; }
                 if pass.as_deref() == Some("quick") { c.last_quick = c.last_sync.clone(); }

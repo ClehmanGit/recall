@@ -13,19 +13,19 @@ export interface Item {
 export interface RecentItem extends Item { indexed_at: string }
 export interface SourceRow { path: string; enabled: boolean; count: number }
 export interface Status {
-  version: string; chunks: number; items: number; vectors: number; embedder_ready: boolean; model: string; dim: number;
+  version: string; chunks: number; items: number; embedder_ready: boolean; model: string;
   sources: SourceRow[]; platforms: [string, number][];
   platform_enabled: Record<string, boolean>; queued: number; done: number; current: string;
-  feedback_enabled: boolean; data_dir: string;
+  feedback_enabled: boolean;
   connections: Record<string, Connection>;
   /** one plain line per chat app, written by the app */
   connection_lines: Record<string, string>;
 }
-export interface Connection { state: "never" | "signing_in" | "connected" | "signed_out" | "syncing"; last_sync: string | null; last_error: string | null; synced: number }
+export interface Connection { state: "never" | "signing_in" | "connected" | "signed_out" | "syncing"; last_sync: string | null; last_error: string | null }
 export interface Rules {
   skip_dev_folders: boolean; skip_hidden: boolean; skip_packages: boolean; skip_media: boolean;
   skip_code_projects: boolean; skip_textless_images: boolean;
-  max_mb: number; follow_links: boolean; ocr: boolean; skipped_folders: string[]; only_kinds: string[];
+  max_mb: number; follow_links: boolean; skipped_folders: string[]; only_kinds: string[];
 }
 export interface ExcludedRow { ident: string; label: string; kind: string; at: string }
 export interface Chunk { id: number; item_id: number; ord: number; locator: string; text: string; anchor: string | null }

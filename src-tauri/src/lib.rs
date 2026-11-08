@@ -26,10 +26,8 @@ pub struct Status {
     pub version: String,
     pub chunks: i64,
     pub items: i64,
-    pub vectors: usize,
     pub embedder_ready: bool,
     pub model: String,
-    pub dim: usize,
     pub sources: Vec<db::SourceRow>,
     pub platforms: Vec<(String, i64)>,
     pub platform_enabled: std::collections::HashMap<String, bool>,
@@ -37,7 +35,6 @@ pub struct Status {
     pub done: usize,
     pub current: String,
     pub feedback_enabled: bool,
-    pub data_dir: String,
     pub connections: std::collections::HashMap<String, connect::Connection>,
     /// one plain line per chat app for Settings
     pub connection_lines: std::collections::HashMap<String, String>,
@@ -46,21 +43,13 @@ pub struct Status {
 #[tauri::command]
 async fn status(app: State<'_, Engine>, conns: State<'_, connect::Connections>) -> Result<Status, String> {
     let prog = app.ingest.progress.snapshot();
-    let (model, dim) = {
-        let g = app.ingest.embedder.lock();
-        match g.as_ref() {
-            Some(e) => (e.cfg.name.clone(), e.dim),
-            None => (String::new(), 0),
-        }
-    };
+    let model = app.ingest.embedder.lock().as_ref().map(|e| e.cfg.name.clone()).unwrap_or_default();
     Ok(Status {
         version: VERSION.into(),
         chunks: db::chunk_count(&app.db).map_err(err)?,
         items: db::item_count(&app.db).map_err(err)?,
-        vectors: app.index.read().len(),
         embedder_ready: app.ingest.embedder.lock().is_some(),
         model,
-        dim,
         sources: db::list_sources(&app.db).map_err(err)?,
         platforms: db::platform_counts(&app.db).map_err(err)?,
         platform_enabled: db::setting_get(&app.db, "platform_enabled").map_err(err)?.unwrap_or_default(),
@@ -68,7 +57,6 @@ async fn status(app: State<'_, Engine>, conns: State<'_, connect::Connections>) 
         done: prog.1,
         current: prog.2,
         feedback_enabled: !FEEDBACK_URL.is_empty(),
-        data_dir: app.data_dir.display().to_string(),
         connections: conns.snapshot(),
         connection_lines: conns.lines(),
     })
@@ -135,7 +123,9 @@ async fn set_star(app: State<'_, Engine>, item_id: i64, on: bool) -> Result<(), 
 /// Excludes one item. Returns it so the UI can offer Undo.
 #[tauri::command]
 async fn exclude_item(app: State<'_, Engine>, item_id: i64) -> Result<Option<db::Item>, String> {
-    let item = db::exclude_item(&app.db, item_id).map_err(err)?;
+    let (item, chunks) = db::exclude_item(&app.db, item_id).map_err(err)?;
+    app.index.write().forget(&chunks);
+    db::shrink(&app.db);
     let _ = app.ingest.tx.send(ingest::Job::Save);
     Ok(item)
 }
@@ -258,7 +248,10 @@ async fn add_source(handle: tauri::AppHandle, app: State<'_, Engine>, picked: St
 async fn remove_source(handle: tauri::AppHandle, app: State<'_, Engine>, path: String) -> Result<(), String> {
     is_source(&app, &path)?;
     app.watch.lock().remove_root(Path::new(&path)).map_err(err)?;
-    db::remove_source(&app.db, &path).map_err(err)?;
+    let chunks = db::remove_source(&app.db, &path).map_err(err)?;
+    app.index.write().forget(&chunks);
+    db::shrink(&app.db);
+    let _ = app.ingest.tx.send(ingest::Job::Save);
     forbid_previews(&handle, &app, &path);
     Ok(())
 }
@@ -351,6 +344,8 @@ async fn data_info(app: State<'_, Engine>) -> Result<DataInfo, String> {
 #[tauri::command]
 async fn reset_index(app: State<'_, Engine>) -> Result<(), String> {
     db::clear_index(&app.db).map_err(err)?;
+    app.index.write().clear().map_err(err)?;
+    let _ = app.ingest.tx.send(ingest::Job::Save);
     resync_everything(&app)
 }
 
@@ -358,7 +353,11 @@ async fn reset_index(app: State<'_, Engine>) -> Result<(), String> {
 
 #[tauri::command]
 async fn send_feedback(text: String) -> Result<(), String> {
-    feedback::send(FEEDBACK_URL, &text, VERSION).map_err(err)
+    // a blocking request: keep it off the async runtime's threads
+    tauri::async_runtime::spawn_blocking(move || feedback::send(FEEDBACK_URL, &text, VERSION))
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 fn show_main(app: &tauri::AppHandle) {

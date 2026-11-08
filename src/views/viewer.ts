@@ -3,22 +3,13 @@
 // out: open in the program Windows uses for that file, or show it in its folder.
 
 import { api, type Item } from "../api";
-import { $, esc, badge, metaLine, hitBody, toast } from "../ui";
+import { $, esc, badge, metaLine, hitBody, toast, isMock, filePathOf, fileSrc } from "../ui";
 import { itemAttrs, actionButtons, onItemChange } from "../actions";
 
 const dlg = $<HTMLDialogElement>("#viewer");
 $("#v-body").tabIndex = -1;
 let current: Item | null = null;
 
-const MOCK = () => (window as any).__RECALL_MOCK__ === true;
-
-function filePath(uri: string): string {
-  return uri.startsWith("file:///") ? decodeURIComponent(uri.slice(8)) : "";
-}
-
-function assetUrlFor(path: string): string {
-  return `http://asset.localhost/${encodeURI(path.replace(/\\/g, "/"))}`;
-}
 
 /** The app decides whether and how an item may be opened; the window only names it. */
 export async function openNative(it: Pick<Item, "id">, anchor?: string) {
@@ -34,7 +25,7 @@ export async function openViewer(it: Item) {
   $("#v-badge").innerHTML = badge(it.kind, it.source, it.title, 32);
   $("#v-name").textContent = it.title;
   $("#v-meta").outerHTML = metaLine(it).replace('class="meta"', 'class="meta" id="v-meta"');
-  const path = filePath(it.uri);
+  const path = filePathOf(it.uri);
   $("#v-path").textContent = path || it.uri;
   $("#v-reveal").classList.toggle("hidden", !path);
   $("#v-open").textContent = it.kind === "chat" ? "Open conversation" : "Open";
@@ -48,13 +39,13 @@ export async function openViewer(it: Item) {
 
   let preview = "";
   if (it.kind === "image" && path) {
-    preview = MOCK()
+    preview = isMock()
       ? `<div class="preview"><div class="ph">Image preview shows here in the app.</div></div>`
-      : `<div class="preview"><img src="${esc(assetUrlFor(path))}" alt=""></div>`;
+      : `<div class="preview"><img src="${esc(fileSrc(path))}" alt=""></div>`;
   } else if (it.kind === "pdf" && path) {
-    preview = MOCK()
+    preview = isMock()
       ? `<div class="preview"><div class="ph">The PDF shows here in the app.</div></div>`
-      : `<div class="preview"><iframe src="${esc(assetUrlFor(path))}" title="${esc(it.title)}"></iframe></div>`;
+      : `<div class="preview"><iframe src="${esc(fileSrc(path))}" title="${esc(it.title)}"></iframe></div>`;
   }
 
   // when the file itself is shown, the passages add nothing

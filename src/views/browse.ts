@@ -3,7 +3,7 @@
 // engine, newest or oldest first. Clicking opens the quick view; star, hide and open come from ../actions.
 
 import { api, type Item } from "../api";
-import { esc, badge, metaLine, rowMeta, listHead, skeleton } from "../ui";
+import { esc, badge, metaLine, rowMeta, listHead, skeleton, isMock, filePathOf, fileSrc } from "../ui";
 import { itemAttrs, actionButtons, onItemChange, fadeOut } from "../actions";
 import { openViewer } from "./viewer";
 
@@ -73,19 +73,14 @@ async function pageMore(root: HTMLElement, p: Paged, kinds: string[], render: (r
 // ---- gallery ----
 
 function tile(it: Item, i: number): string {
-  const path = it.uri.startsWith("file:///") ? it.uri.replace(/^file:\/\/\//, "") : "";
-  const thumb = it.kind === "image" && path && !(window as any).__RECALL_MOCK__
-    ? `<img src="${esc(toAsset(path))}" alt="" loading="lazy">`
+  const path = filePathOf(it.uri);
+  const thumb = it.kind === "image" && path && !isMock()
+    ? `<img src="${esc(fileSrc(path))}" alt="" loading="lazy">`
     : badge(it.kind, it.source, it.title, 32);
   return `<article class="tile" style="--i:${Math.min(i, 24)}" ${itemAttrs(it)}>
     <div class="thumb">${thumb}${actionButtons(it.starred)}</div>
     <div class="tbody"><span class="title" title="${esc(it.title)}">${esc(it.title)}</span>${metaLine(it, 0)}</div>
   </article>`;
-}
-
-// Tauri serves local files to the webview through the asset protocol; the mock just shows a badge.
-function toAsset(path: string): string {
-  return `http://asset.localhost/${encodeURI(path.replace(/\\/g, "/"))}`;
 }
 
 const galleryKinds = () => (gallery.kind ? [gallery.kind] : VISUAL);

@@ -5,10 +5,25 @@ import type { Card, Item } from "./api";
 export const $ = <T extends HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 
 export function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+}
+
+/** True in the browser-only demo (`npm run web` without Tauri). */
+export const isMock = () => (window as any).__RECALL_MOCK__ === true;
+
+/** The local path behind a file:/// item, or "". Paths are stored as written, not percent-encoded. */
+export function filePathOf(uri: string): string {
+  return uri.startsWith("file:///") ? uri.slice(8) : "";
+}
+
+/** A local file as the window may load it: through the asset protocol, which serves only the chosen folders. */
+export function fileSrc(path: string): string {
+  return `http://asset.localhost/${encodeURIComponent(path)}`;
 }
 
 // Marks: platform and language tiles use the real marks from ./assets, formats use lettered badges.
+/** The chat apps, in the order they are listed everywhere. */
+export const PLATFORMS = ["claude", "chatgpt", "gemini"] as const;
 export const PLATFORM_MARK: Record<string, string> = { claude: "claude.svg", gemini: "gemini.svg", chatgpt: "openai.svg" };
 export const PLATFORM_LABEL: Record<string, string> = { claude: "Claude", gemini: "Gemini", chatgpt: "ChatGPT" };
 const LANG_MARK: Record<string, string> = { py: "python.svg", ts: "typescript.svg", js: "javascript.svg", rs: "rust.svg", go: "go.svg" };
@@ -39,7 +54,7 @@ export function badge(kind: string, source: string, title: string, size = 32): s
     return `<span class="badge tile" style="--b:${size}px"><img src="${assetUrl(LANG_MARK[ext])}" alt="" style="width:${img}px;height:${img}px"></span>`;
   }
   const label = kind === "pdf" ? "PDF" : ext.slice(0, 4).toUpperCase() || kind.slice(0, 3).toUpperCase();
-  return `<span class="badge ${kind}" style="--b:${size}px">${label}</span>`;
+  return `<span class="badge ${esc(kind)}" style="--b:${size}px">${esc(label)}</span>`;
 }
 
 export function fmtDate(iso: string): string {
@@ -102,9 +117,6 @@ export function rowMeta(it: Pick<Item, "location" | "size_label" | "kind" | "sou
 }
 
 /// Short meta for small cards: where it lives and when, nothing that has to be cut off.
-export function shortMeta(it: Pick<Item, "location" | "modified_at" | "kind" | "source">): string {
-  return `<div class="meta">${crumbs(it, 1)}<span class="sep">/</span><span>${fmtDate(it.modified_at)}</span></div>`;
-}
 
 // ---- markdown, the subset chunks carry: headings, bold, italic, code spans, lists, paragraphs ----
 export function md(src: string): string {

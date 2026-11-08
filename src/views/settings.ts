@@ -1,7 +1,7 @@
 // Settings: sources, what to skip, chat apps, model, storage, about. Switches and pickers, no typing.
 
 import { api, type Rules, type Status } from "../api";
-import { $, esc, fmtBytes, fmtDate, shortPath, toast, FOLDER_SVG, PLATFORM_LABEL, PLATFORM_MARK, assetUrl } from "../ui";
+import { $, esc, fmtBytes, fmtDate, shortPath, toast, FOLDER_SVG, PLATFORMS, PLATFORM_LABEL, PLATFORM_MARK, assetUrl } from "../ui";
 import { pickFolders } from "./search";
 
 const root = $<HTMLDivElement>("#settings");
@@ -45,7 +45,7 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
 
         <section id="s-platforms" class="home-sec">
           <div class="section-row"><span class="section">CHAT APPS</span></div>
-          <div class="list">${["claude", "gemini", "chatgpt"].map((p) => {
+          <div class="list">${PLATFORMS.map((p) => {
             const n = s.platforms.find(([k]) => k === p)?.[1] ?? 0;
             const on = s.platform_enabled[p] !== false;
             const c = s.connections[p] ?? { state: "never", last_sync: null, last_error: null, synced: 0 };
@@ -93,7 +93,6 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
           <div class="list">
             <div class="row kinds"><span class="rt">File types</span>
               <span class="chips">${KINDS.map(([k, l]) => `<button class="chip small ${!r.only_kinds.length || r.only_kinds.includes(k) ? "active" : ""}" data-kind="${k}">${l}</button>`).join("")}</span></div>
-            ${sw("r-ocr", r.ocr, "Read text inside images")}
             ${sw("r-links", r.follow_links, "Follow shortcuts to other folders")}
           </div>
           <div class="hint" id="r-preview">—</div>
@@ -119,7 +118,7 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
 
         <section id="s-about" class="home-sec">
           <div class="section-row"><span class="section">PRIVACY</span></div>
-          <div class="panel hint-panel">Everything stays on this computer. Recall makes no connections to the internet. ${s.feedback_enabled ? "Feedback is sent only when you press Send, and contains only what you wrote." : ""}<br><br>Recall ${esc(s.version)}</div>
+          <div class="panel hint-panel">Everything stays on this computer. Recall reads only the folders you choose and copies chats only from the apps you sign in to. It sends nothing anywhere. ${s.feedback_enabled ? "Feedback is sent only when you press Send, and contains only what you wrote." : ""}<br><br>Recall ${esc(s.version)}</div>
         </section>
       </div>
     </div>`;
@@ -180,7 +179,6 @@ function wire(s: Status) {
   bindSwitch("r-hidden", "skip_hidden");
   bindSwitch("r-packages", "skip_packages");
   bindSwitch("r-media", "skip_media");
-  bindSwitch("r-ocr", "ocr");
   bindSwitch("r-links", "follow_links");
   $<HTMLSelectElement>("#r-max").onchange = (e) => { rules.max_mb = Number((e.target as HTMLSelectElement).value); save(); };
 

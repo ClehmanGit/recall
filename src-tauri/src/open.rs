@@ -21,7 +21,7 @@ enum Target {
 
 fn target(app: &Engine, item_id: i64) -> Result<Target, String> {
     let it = db::get_item(&app.db, item_id)
-        .map_err(|e| e.to_string())?
+        .map_err(crate::err)?
         .ok_or("That item is no longer in Recall.")?;
     if let Some(rest) = it.uri.strip_prefix("file:///") {
         let path = real_path(rest);
@@ -63,7 +63,7 @@ pub async fn open_item(handle: tauri::AppHandle, app: State<'_, Engine>, item_id
             if anchor.is_some() {
                 url.set_fragment(anchor.as_deref());
             }
-            handle.opener().open_url(url.as_str(), None::<&str>).map_err(|e| e.to_string())
+            handle.opener().open_url(url.as_str(), None::<&str>).map_err(crate::err)
         }
         Target::File { path, kind } if kind == "code" => edit(&path),
         Target::File { path, kind } => {
@@ -72,11 +72,11 @@ pub async fn open_item(handle: tauri::AppHandle, app: State<'_, Engine>, item_id
                 if let Some(page) = anchor.filter(|a| a.chars().all(|c| c.is_ascii_digit())) {
                     if let Ok(mut url) = tauri::Url::from_file_path(dunce(&path)) {
                         url.set_fragment(Some(&format!("page={page}")));
-                        return handle.opener().open_url(url.as_str(), None::<&str>).map_err(|e| e.to_string());
+                        return handle.opener().open_url(url.as_str(), None::<&str>).map_err(crate::err);
                     }
                 }
             }
-            handle.opener().open_path(dunce(&path).to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+            handle.opener().open_path(dunce(&path).to_string_lossy(), None::<&str>).map_err(crate::err)
         }
     }
 }
@@ -84,7 +84,7 @@ pub async fn open_item(handle: tauri::AppHandle, app: State<'_, Engine>, item_id
 #[tauri::command]
 pub async fn reveal_item(handle: tauri::AppHandle, app: State<'_, Engine>, item_id: i64) -> Result<(), String> {
     match target(&app, item_id)? {
-        Target::File { path, .. } => handle.opener().reveal_item_in_dir(dunce(&path)).map_err(|e| e.to_string()),
+        Target::File { path, .. } => handle.opener().reveal_item_in_dir(dunce(&path)).map_err(crate::err),
         Target::Chat(_) => Err("A chat has no folder to show.".into()),
     }
 }
@@ -114,7 +114,7 @@ fn edit(path: &Path) -> Result<(), String> {
     if code > 32 {
         return Ok(());
     }
-    std::process::Command::new("notepad.exe").arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
+    std::process::Command::new("notepad.exe").arg(&path).spawn().map(|_| ()).map_err(crate::err)
 }
 
 #[cfg(not(windows))]
