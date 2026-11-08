@@ -235,11 +235,21 @@ pub fn mark_present(db: &Db, ident: &str) -> Result<()> {
     Ok(())
 }
 
-/// Chunk ids and texts from `after` on, in id order, for the vector backfill.
-pub fn chunks_from(db: &Db, after: i64, limit: usize) -> Result<Vec<(i64, String)>> {
+/// Chunk ids, texts and their items' titles from `after` on, in id order, for the vector backfill.
+pub fn chunks_from(db: &Db, after: i64, limit: usize) -> Result<Vec<(i64, String, String)>> {
     let conn = db.lock();
-    let mut stmt = conn.prepare("SELECT id, text FROM chunks WHERE id >= ?1 ORDER BY id LIMIT ?2")?;
-    let rows = stmt.query_map(params![after, limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let mut stmt = conn.prepare(
+        "SELECT c.id, c.text, i.title FROM chunks c JOIN items i ON i.id = c.item_id WHERE c.id >= ?1 ORDER BY c.id LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![after, limit as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+/// Every item's id and title, for matching a search against names.
+pub fn item_titles(db: &Db) -> Result<Vec<(i64, String)>> {
+    let conn = db.lock();
+    let mut stmt = conn.prepare("SELECT id, title FROM items WHERE missing = 0")?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
