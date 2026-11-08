@@ -5,6 +5,7 @@
   "description": "Local semantic search across AI chats and your files.",
   "type": "module",
   "scripts": {
+    "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
     "web": "vite",
