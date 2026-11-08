@@ -123,19 +123,26 @@ a { color: inherit; }
 .page {
   min-height: 100vh; min-height: 100dvh; max-width: 1180px; margin: 0 auto;
   padding: clamp(14px, 2.4vh, 28px) var(--gutter);
-  display: grid; grid-template-rows: auto 1fr auto auto; gap: clamp(14px, 3vh, 36px);
+  display: grid; grid-template-rows: 1fr auto auto; gap: clamp(14px, 3vh, 36px);
 }
 
 /* ---------- top ---------- */
-.top { display: flex; align-items: center; justify-content: space-between; }
-.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--serif); font-weight: 600; font-size: 21px; letter-spacing: .01em; }
+/* the name is the page's title: owl and "Recall" as one big lockup, sized to
+   the column's width (cqi) and the window's height so it always fits */
+.pitch { container-type: inline-size; }
+.brand {
+  display: inline-flex; align-items: center; gap: .12em; margin: 0 0 .08em -.06em;
+  text-decoration: none; font-family: var(--sans); font-weight: 700; text-transform: uppercase;
+  font-size: min(150px, 15cqi, 12.5vh); letter-spacing: .08em; line-height: .9;
+}
+.brand img { width: 1.2em; height: 1.2em; flex: none; filter: drop-shadow(0 .05em .1em rgba(26,25,22,.22)); }
 .foot-link { color: var(--ink-3); text-decoration: none; border-bottom: 1px solid transparent; transition: color .18s var(--ease), border-color .18s var(--ease); }
 .foot-link:hover { color: var(--ink); border-color: var(--amber-bar); }
 
 /* ---------- hero ---------- */
 .hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: center; gap: clamp(24px, 5vw, 72px); }
-h1 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: clamp(34px, min(5vw, 7.4vh), 62px); line-height: 1.04; letter-spacing: -.015em; text-wrap: balance; }
-h1 em { font-style: italic; font-weight: 500; color: var(--amber); }
+h1 { margin: 0; font-family: var(--sans); font-weight: 700; font-size: clamp(24px, min(3vw, 4.4vh), 40px); line-height: 1.12; letter-spacing: -.02em; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--amber); }
 .lede { margin: clamp(12px, 2.2vh, 20px) 0 0; max-width: 50ch; font-size: clamp(15px, 2.1vh, 17.5px); color: var(--ink-2); }
 .lede strong { font-weight: 650; color: var(--ink); }
 
@@ -232,7 +239,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
   .demo { display: none; }
   .veil { background: color-mix(in srgb, var(--bg) 62%, transparent); }
   .dl { width: 100%; justify-content: center; }
-  h1 { font-size: 33px; }
+  h1 { font-size: 24px; }
   .lede { font-size: 15px; }
   .get { margin-top: 18px; }
   .dl-text { align-items: center; }
@@ -249,7 +256,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 /* shorter laptop screens: tighten the vertical rhythm so it still fits without scrolling */
 @media (max-height: 780px) and (min-width: 601px) {
   .page { gap: clamp(10px, 2.2vh, 24px); }
-  h1 { font-size: clamp(34px, 6.6vh, 56px); }
+  h1 { font-size: clamp(22px, 4.2vh, 32px); }
   .lede { margin-top: 10px; }
   .get { margin-top: 16px; gap: 10px; }
   .ic { width: 36px; height: 36px; border-radius: 10px; margin-bottom: 8px; }
@@ -261,9 +268,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 /* very short windows, such as a 1080p screen at 150% Windows scaling */
 @media (max-height: 680px) and (min-width: 601px) {
   .page { padding-block: 10px; gap: 10px; }
-  .brand { font-size: 19px; }
-  .brand img { width: 24px; height: 24px; }
-  h1 { font-size: clamp(30px, 6.6vh, 44px); }
+  h1 { font-size: clamp(20px, 4vh, 26px); }
   .lede { font-size: 14.5px; margin-top: 8px; }
   .get { margin-top: 12px; }
   .dl { padding: 10px 24px 10px 18px; }

@@ -36,7 +36,10 @@ function fit() {
   }
 }
 fit();
+// and again once the web fonts have swapped in, since they change line heights
 document.fonts?.ready.then(fit);
+document.fonts?.addEventListener?.("loadingdone", () => fit());
+addEventListener("load", () => fit());
 // re-check shortly after every resize, and once more in case layout was still settling
 // (also when the window size changes without a resize event, as some tools do)
 let ft, ft2, seen = `${innerWidth}x${innerHeight}`;
@@ -46,6 +49,13 @@ function schedule() {
   ft2 = setTimeout(fit, 500);
 }
 addEventListener("resize", schedule);
+// and whenever the content itself changes height (a late font swap, for one)
+const hero = document.querySelector(".hero");
+let heroH = 0;
+if ("ResizeObserver" in window && hero) new ResizeObserver(() => {
+  const h = Math.round(hero.getBoundingClientRect().height / (parseFloat(page.style.getPropertyValue("--fit")) || 1));
+  if (Math.abs(h - heroH) > 1) { heroH = h; schedule(); }
+}).observe(hero);
 if ("ResizeObserver" in window) new ResizeObserver(() => {
   const now = `${innerWidth}x${innerHeight}`;
   if (now !== seen) { seen = now; schedule(); }
