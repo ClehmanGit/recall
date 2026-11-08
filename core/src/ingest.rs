@@ -424,7 +424,7 @@ fn ingest_file(
     if !changed {
         return Ok(0);
     }
-    embed_and_store(db, index, embedder, item_id, ex.units)
+    embed_and_store(db, index, embedder, item_id, &item.title, ex.units)
 }
 
 fn ingest_chat(
@@ -470,7 +470,7 @@ fn ingest_chat(
             anchor: m.id,
         })
         .collect();
-    embed_and_store(db, index, embedder, item_id, units)
+    embed_and_store(db, index, embedder, item_id, &item.title, units)
 }
 
 fn embed_and_store(
@@ -478,13 +478,14 @@ fn embed_and_store(
     index: &VecIndex,
     embedder: &Arc<Mutex<Option<Embedder>>>,
     item_id: i64,
+    title: &str,
     units: Vec<Unit>,
 ) -> Result<usize> {
     let chunks = chunk::chunk_units(units);
     let (old, ids) = db::replace_chunks(db, item_id, &chunks)?;
     // before adding: SQLite may hand an old chunk's id to a new one
     index.write().forget(&old);
-    let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+    let texts: Vec<String> = chunks.iter().map(|c| for_embedding(title, &c.text)).collect();
     for (batch_ids, batch_texts) in ids.chunks(16).zip(texts.chunks(16)) {
         // one batch per lock, so a long document never makes a search wait
         let mut guard = embedder.lock();
@@ -501,6 +502,13 @@ fn embed_and_store(
     Ok(chunks.len())
 }
 
+/// What gets embedded for a passage: its item's name, then its text, so a
+/// search for what a file or chat is called finds it by meaning too, even when
+/// the text never says it. "Nameless_book.pdf" reads as "Nameless book".
+pub fn for_embedding(title: &str, text: &str) -> String {
+    format!("{}\n{}", crate::search::readable_title(title), text)
+}
+
 /// Embeds up to one slice of stored chunks that have no vector, starting at
 /// chunk id `after`. Returns where to go on, or None when every chunk has one.
 /// A batch that fails is retried one chunk at a time, so one bad passage
@@ -508,13 +516,13 @@ fn embed_and_store(
 fn backfill(db: &Db, index: &VecIndex, embedder: &Arc<Mutex<Option<Embedder>>>, after: i64) -> Result<Option<i64>> {
     const SLICE: usize = 512;
     let rows = db::chunks_from(db, after, SLICE)?;
-    let Some(&(last, _)) = rows.last() else {
+    let Some(&(last, _, _)) = rows.last() else {
         info!("backfill done");
         return Ok(None);
     };
     let todo: Vec<(i64, String)> = {
         let ix = index.read();
-        rows.into_iter().filter(|(id, _)| !ix.contains(*id as u64)).collect()
+        rows.into_iter().filter(|(id, _, _)| !ix.contains(*id as u64)).map(|(id, text, title)| (id, for_embedding(&title, &text))).collect()
     };
     if after == 0 || !todo.is_empty() {
         info!("backfill: {} chunks without vectors from id {after}", todo.len());
