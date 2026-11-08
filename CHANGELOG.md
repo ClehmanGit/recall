@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- "Continue with Google" and "Continue with Apple" on Claude's sign-in page work. They open a pop-up, which the sign-in window used to block without a word. Pop-ups open only from a sign-in window you can see, and only for Google, Apple or Microsoft sign-in pages or the chat site itself.
+
 ## 2.1.2 (November 8, 2026)
 
 - Uninstalling Recall now removes everything it stored: the search index, settings, log and chat sign-ins. Your own files are not touched. Updating keeps everything, as before.

@@ -44,6 +44,23 @@ fn start_url(platform: &str) -> &'static str {
     }
 }
 
+/// Sign-in pages a chat site may open in a pop-up: Claude's "Continue with
+/// Google" and "Continue with Apple" open one, and the page waits for it.
+const SIGN_IN_HOSTS: [&str; 4] = ["accounts.google.com", "appleid.apple.com", "login.microsoftonline.com", "login.live.com"];
+
+/// A pop-up opens only from a sign-in window the person can see, and only for a
+/// sign-in page or the chat site itself (some flows open `about:blank` first).
+/// Without a handler WebView2 cancels every pop-up, which left the button dead.
+/// The pop-up is a plain WebView2 window: no Recall commands, no reader script.
+fn allows_popup(app: &AppHandle, platform: &str, url: &tauri::Url) -> bool {
+    let visible = app.get_webview_window(&label(platform)).and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    let host = url.host_str().unwrap_or_default();
+    let site = tauri::Url::parse(start_url(platform)).ok();
+    let own_site = site.as_ref().and_then(|s| s.host_str()) == Some(host);
+    let sign_in = url.scheme() == "https" && (SIGN_IN_HOSTS.contains(&host) || own_site);
+    visible && (sign_in || url.as_str() == "about:blank")
+}
+
 fn label(platform: &str) -> String {
     format!("connect-{platform}")
 }
@@ -192,6 +209,7 @@ fn ensure_window(app: &AppHandle, platform: &str, show: bool) -> Result<tauri::W
     }
     let url: tauri::Url = start_url(platform).parse().map_err(crate::err)?;
     let p = platform.to_string();
+    let (popup_app, popup_platform) = (app.clone(), platform.to_string());
     info!("{platform}: opening sign-in window (visible={show})");
     WebviewWindowBuilder::new(app, label(platform), WebviewUrl::External(url))
         .title(title(platform))
@@ -203,6 +221,11 @@ fn ensure_window(app: &AppHandle, platform: &str, show: bool) -> Result<tauri::W
         .on_navigation(|url| url.scheme() == "https" || url.as_str() == "about:blank")
         // a hidden window must never save files to the computer
         .on_download(|_, _| false)
+        .on_new_window(move |url, _| {
+            let ok = allows_popup(&popup_app, &popup_platform, &url);
+            info!("{popup_platform}: pop-up to {} {}", url.host_str().unwrap_or(url.scheme()), if ok { "opened" } else { "blocked" });
+            if ok { tauri::webview::NewWindowResponse::Allow } else { tauri::webview::NewWindowResponse::Deny }
+        })
         // origin and path only: query strings can carry sign-in tokens
         .on_page_load(move |_w, e| debug!("{p}: page {:?} {}{}", e.event(), e.url().origin().ascii_serialization(), e.url().path()))
         .build()
