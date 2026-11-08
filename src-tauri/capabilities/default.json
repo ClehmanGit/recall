@@ -31,43 +31,12 @@
     "allow-data-info",
     "allow-reset-index",
     "allow-send-feedback",
+    "allow-open-item",
+    "allow-reveal-item",
     "allow-connect-platform",
     "allow-sync-platform",
     "allow-disconnect-platform",
-    "allow-connect-cursor",
-    "allow-connect-ingest",
-    "allow-connect-report",
     "core:default",
-    "dialog:allow-open",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    },
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [
-        {
-          "url": "https://**"
-        },
-        {
-          "url": "http://**"
-        },
-        {
-          "url": "file://**"
-        }
-      ]
-    },
-    {
-      "identifier": "opener:allow-reveal-item-in-dir",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    }
+    "dialog:allow-open"
   ]
 }

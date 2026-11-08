@@ -66,11 +66,8 @@ CREATE TABLE IF NOT EXISTS sources (
     enabled    INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE TABLE IF NOT EXISTS sync_cursors (
-    platform   TEXT PRIMARY KEY,
-    cursor     TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
+-- held the browser extension's place per platform; nothing uses it now
+DROP TABLE IF EXISTS sync_cursors;
 
 CREATE TABLE IF NOT EXISTS recent_queries (
     q          TEXT PRIMARY KEY,
@@ -358,25 +355,7 @@ pub fn platform_counts(db: &Db) -> Result<Vec<(String, i64)>> {
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-pub fn get_cursor(db: &Db, platform: &str) -> Result<Option<String>> {
-    db.lock()
-        .query_row(
-            "SELECT cursor FROM sync_cursors WHERE platform = ?1",
-            params![platform],
-            |r| r.get(0),
-        )
-        .optional()
-        .map_err(Into::into)
-}
 
-pub fn set_cursor(db: &Db, platform: &str, cursor: &str) -> Result<()> {
-    db.lock().execute(
-        "INSERT INTO sync_cursors (platform, cursor, updated_at) VALUES (?1,?2,?3)
-         ON CONFLICT(platform) DO UPDATE SET cursor=excluded.cursor, updated_at=excluded.updated_at",
-        params![platform, cursor, Utc::now().to_rfc3339()],
-    )?;
-    Ok(())
-}
 
 /// Chats held for a platform: conversation id -> modified_at (RFC3339). The
 /// sign-in windows read only chats missing here or newer, so a backup resumes
@@ -584,7 +563,7 @@ pub fn item_count(db: &Db) -> Result<i64> {
 /// Drops every item and chunk. Sources, rules, exclusions and stars on nothing survive.
 pub fn clear_index(db: &Db) -> Result<()> {
     let conn = db.lock();
-    conn.execute_batch("DELETE FROM chunks; DELETE FROM items; DELETE FROM sync_cursors;")?;
+    conn.execute_batch("DELETE FROM chunks; DELETE FROM items;")?;
     Ok(())
 }
 

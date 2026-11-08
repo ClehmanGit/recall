@@ -61,7 +61,6 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
               <button class="switch ${on ? "on" : ""}" role="switch" aria-checked="${on}" aria-label="Include ${PLATFORM_LABEL[p]}" title="Include in search"><i></i></button></div>`;
           }).join("")}</div>
           <div class="hint">Connect opens the app's own sign-in page in a window inside Recall. You sign in there, the same way you always do; Recall never sees your password. The window then closes and Recall copies your recent and starred conversations to this computer first, then checks for new ones every fifteen minutes. Older conversations are copied a few at a time while the computer is idle or at night, so they do not slow you down. Nothing is sent anywhere else. Closing the window keeps Recall running in the tray, next to the clock, so this carries on; quit from the tray icon.</div>
-          <details class="hint"><summary>Using the browser extension instead</summary>Paste this key into the extension once: <code>${esc(s.token.slice(0, 8))}…</code> <button class="link" id="s-copy">Copy key</button></details>
         </section>
 
         <section id="s-excluded" class="home-sec">
@@ -156,13 +155,6 @@ function bindSwitch(id: string, key: keyof Rules) {
 function wire(s: Status) {
   $("#s-add").onclick = async () => { const n = await pickFolders(); if (n.length) { toast(n.length === 1 ? "Indexing started" : `Indexing ${n.length} folders`); renderSettings(); } };
   $("#s-resync").onclick = async () => { await api.resyncAll(); toast("Refreshing all folders"); };
-  $("#s-copy").onclick = () => navigator.clipboard.writeText(s.token).then(() => toast("Key copied"), () => {
-    // clipboard refused: show the whole key, selected, so Ctrl+C works
-    const code = $("#s-copy").previousElementSibling as HTMLElement;
-    code.textContent = s.token;
-    getSelection()?.selectAllChildren(code);
-    toast("Could not copy. The key is selected; press Ctrl+C.");
-  });
   $("#s-reset").onclick = async () => { if (confirm("Rebuild the index? Folders, settings and hidden items are kept. This takes a while.")) { await api.resetIndex(); toast("Rebuilding"); } };
 
   root.querySelectorAll<HTMLElement>(".src-row").forEach((row) => {

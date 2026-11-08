@@ -2,7 +2,9 @@
 //! shows the site's own sign-in page. Once signed in, the window is hidden and
 //! kept for backups; `connect/reader.js` runs inside it and hands conversations
 //! to the commands below. Cookies live in the app's WebView2 profile on this
-//! machine, and the window only ever loads the platform's own site.
+//! machine. The window opens on the platform's own site and goes only to
+//! https pages (sign-in can pass through Google, Microsoft or Apple); the
+//! reader's commands work only on the chat sites themselves (capabilities/connect.json).
 //!
 //! Two kinds of backup, both run by the reader:
 //! - quick: starred chats and the most recent ones, on sign-in and every fifteen
@@ -11,7 +13,7 @@
 //! Both read only chats Recall does not hold yet or that changed (`connect_known`).
 
 use parking_lot::Mutex;
-use recall_core::{bridge, db, ingest::ChatPayload, Engine};
+use recall_core::{db, ingest::{ChatPayload, Job}, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -177,6 +179,13 @@ fn valid(platform: &str) -> Result<(), String> {
     if PLATFORMS.contains(&platform) { Ok(()) } else { Err(format!("unknown platform {platform}")) }
 }
 
+/// The reader's commands answer only the platform's own window, so a page on
+/// one chat site cannot read or add another site's chats.
+fn own(window: &tauri::WebviewWindow, platform: &str) -> Result<(), String> {
+    valid(platform)?;
+    if window.label() == label(platform) { Ok(()) } else { Err(format!("{} may not act for {platform}", window.label())) }
+}
+
 /// Creates the platform's window if it does not exist. Hidden unless `show`.
 fn ensure_window(app: &AppHandle, platform: &str, show: bool) -> Result<tauri::WebviewWindow, String> {
     if let Some(w) = app.get_webview_window(&label(&platform)) {
@@ -192,6 +201,8 @@ fn ensure_window(app: &AppHandle, platform: &str, show: bool) -> Result<tauri::W
         .min_inner_size(720.0, 560.0)
         .visible(show)
         .initialization_script(READER)
+        // nothing but https: no file:, no custom schemes, no plain http
+        .on_navigation(|url| url.scheme() == "https" || url.as_str() == "about:blank")
         // origin and path only: query strings can carry sign-in tokens
         .on_page_load(move |_w, e| debug!("{p}: page {:?} {}{}", e.event(), e.url().origin().ascii_serialization(), e.url().path()))
         .build()
@@ -236,17 +247,11 @@ pub async fn disconnect_platform(app: AppHandle, engine: tauri::State<'_, Engine
 
 // ---------- commands called from inside a sign-in window ----------
 
-/// Kept for the browser extension's shape; the sign-in windows use `connect_known`.
-#[tauri::command]
-pub async fn connect_cursor(engine: tauri::State<'_, Engine>, platform: String) -> Result<Option<String>, String> {
-    valid(&platform)?;
-    db::get_cursor(&engine.db, &platform).map_err(|e| e.to_string())
-}
 
 /// Which chats Recall already holds for a platform: id -> updated_at.
 #[tauri::command]
-pub async fn connect_known(engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String) -> Result<HashMap<String, String>, String> {
-    valid(&platform)?;
+pub async fn connect_known(window: tauri::WebviewWindow, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String) -> Result<HashMap<String, String>, String> {
+    own(&window, &platform)?;
     let mut known = db::chat_versions(&engine.db, &platform).map_err(|e| e.to_string())?;
     if let Some(queued) = conns.1.lock().get(&platform) {
         for (id, at) in queued {
@@ -258,8 +263,13 @@ pub async fn connect_known(engine: tauri::State<'_, Engine>, conns: tauri::State
 }
 
 #[tauri::command]
-pub async fn connect_ingest(engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String, conversations: Vec<ChatPayload>, cursor: Option<String>) -> Result<usize, String> {
-    valid(&platform)?;
+pub async fn connect_ingest(window: tauri::WebviewWindow, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String, conversations: Vec<ChatPayload>) -> Result<usize, String> {
+    own(&window, &platform)?;
+    // a platform switched off in Settings is acknowledged and dropped
+    let enabled: HashMap<String, bool> = db::setting_get(&engine.db, "platform_enabled").ok().flatten().unwrap_or_default();
+    if enabled.get(&platform).copied() == Some(false) {
+        return Ok(0);
+    }
     let held = db::chat_versions(&engine.db, &platform).unwrap_or_default();
     let mut new = 0;
     {
@@ -273,12 +283,18 @@ pub async fn connect_ingest(engine: tauri::State<'_, Engine>, conns: tauri::Stat
     // keep "N left" current between full listings
     conns.update(&engine, &platform, |c| { if let Some(left) = c.remaining.as_mut() { *left = left.saturating_sub(new); } });
     info!("{platform}: received {} chats ({new} new)", conversations.len());
-    Ok(bridge::accept(&engine.db, &engine.ingest.tx, &engine.ingest.progress, &platform, conversations, cursor.as_deref()))
+    let n = conversations.len();
+    engine.ingest.progress.queued.fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+    for c in conversations {
+        let _ = engine.ingest.tx.send(Job::Chat(c));
+    }
+    let _ = engine.ingest.tx.send(Job::Save);
+    Ok(n)
 }
 
 #[tauri::command]
-pub async fn connect_progress(conns: tauri::State<'_, Connections>, platform: String, pass: String, stage: String, done: usize, total: usize) -> Result<(), String> {
-    valid(&platform)?;
+pub async fn connect_progress(window: tauri::WebviewWindow, conns: tauri::State<'_, Connections>, platform: String, pass: String, stage: String, done: usize, total: usize) -> Result<(), String> {
+    own(&window, &platform)?;
     // kept in memory only; the state is saved with the next report
     let mut m = conns.0.lock();
     let c = m.entry(platform).or_default();
@@ -297,6 +313,7 @@ pub async fn connect_progress(conns: tauri::State<'_, Connections>, platform: St
 #[tauri::command]
 pub async fn connect_report(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     engine: tauri::State<'_, Engine>,
     conns: tauri::State<'_, Connections>,
     platform: String,
@@ -307,7 +324,7 @@ pub async fn connect_report(
     total: Option<usize>,
     remaining: Option<usize>,
 ) -> Result<(), String> {
-    valid(&platform)?;
+    own(&window, &platform)?;
     info!("{platform}: report signed_in={signed_in} pass={pass:?} synced={synced} total={total:?} remaining={remaining:?} error={error:?}");
     let w = app.get_webview_window(&label(&platform));
     if signed_in {

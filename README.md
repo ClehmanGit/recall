@@ -4,12 +4,11 @@ Local semantic search across AI chats and your files. One search box, one ranked
 
 ```
 recall/
-├── core/          recall-core: ingest, rules, embed, index, search, localhost bridge. No UI dependency.
+├── core/          recall-core: ingest, rules, embed, index, search. No UI dependency.
 │   └── src/bin/   probe: headless pipeline check
 ├── src-tauri/     Tauri 2 shell (window, commands, bundling, models/)
 ├── src/           frontend: vanilla TypeScript + Vite
 │   └── views/     search, home, getting started, gallery and timeline, quick view, settings
-├── extension/     Chrome MV3 bridge for Claude, Gemini, ChatGPT (alternative to signing in inside the app)
 ├── site/          the one-page download website
 ├── scripts/       fetch-model.mjs, update-installed.ps1
 └── assets/        mascot
@@ -82,19 +81,9 @@ The script notices sign-in on its own, checking every 3 seconds for ten minutes,
 - **Quick backup** first: recent and starred chats. It runs again every fifteen minutes.
 - **Full backup** of older chats, 50 at a time, only while the computer has been idle for five minutes or between 1 and 6 am, until every chat is in.
 
-The reader asks the app which chats it already has and when each changed (`connect_known`), so only new or changed chats are fetched, and reports progress (`connect_progress`) for the line under each app in Settings. If a site asks Recall to slow down for longer than 15 seconds, the run stops and that app pauses for 30 minutes. Batches arrive through `connect_ingest` and the result through `connect_report`; the `connect` capability exposes only these reader commands, to those sites only. Disconnect clears the window's browsing data. Connection state lives in the `connections` setting; the schedule is at the top of `src-tauri/src/connect.rs`.
+The reader asks the app which chats it already has and when each changed (`connect_known`), so only new or changed chats are fetched, and reports progress (`connect_progress`) for the line under each app in Settings. If a site asks Recall to slow down for longer than 15 seconds, the run stops and that app pauses for 30 minutes. Batches arrive through `connect_ingest` and the result through `connect_report`; the `connect` capability exposes only these four reader commands, to those sites only, and each command answers only its own platform's window. The window goes only to https pages. Disconnect clears the window's browsing data. Connection state lives in the `connections` setting; the schedule is at the top of `src-tauri/src/connect.rs`.
 
-Every app command is listed in `build.rs` so Tauri generates `allow-<command>` permissions; `capabilities/default.json` grants all of them to the main window, `capabilities/connect.json` grants the three reader commands to the sign-in windows.
-
-## Chats: the extension bridge (alternative)
-
-1. `chrome://extensions` → Developer mode → Load unpacked → pick `extension/`.
-2. Settings › Platforms shows the app token (Copy). Paste it into the extension popup once.
-3. Click **Sync now**. After that it runs every 15 minutes.
-
-The bridge only talks to `127.0.0.1:47617`, and the app only accepts requests carrying that token. Each platform keeps a cursor, the newest `updated_at` the app has accepted, so a new conversation always arrives on the next sync even if the platform reorders its list. A platform switched off in Settings is acknowledged and dropped.
-
-If a platform shows **error** in the popup, that module's endpoint shape has drifted. Gemini is the one that moves; `extension/platforms/gemini.js` says where to look.
+Every app command is listed in `build.rs` so Tauri generates `allow-<command>` permissions; `capabilities/default.json` grants all of them to the main window, `capabilities/connect.json` grants the four reader commands to the sign-in windows.
 
 ## How it indexes
 
@@ -131,7 +120,11 @@ Closing the window keeps Recall running in the tray so folders and chats stay cu
 
 ## Network
 
-Outbound connections: none. The bridge listens on 127.0.0.1 only. Fonts are bundled. Feedback, when a build has an endpoint, sends only on Send and carries only the text typed plus the app version and OS name (`core/src/feedback.rs`). No identifiers, no usage data, no telemetry from ONNX Runtime (pyke builds have it off).
+Outbound connections: none, and Recall listens on no port. Fonts are bundled. Feedback, when a build has an endpoint, sends only on Send and carries only the text typed plus the app version and OS name (`core/src/feedback.rs`). No identifiers, no usage data, no telemetry from ONNX Runtime (pyke builds have it off).
+
+## What the window may touch
+
+The main window holds no file permissions of its own. Thumbnails and quick view read files through the asset protocol, whose scope starts empty and holds only the folders turned on in Settings. Open and Show in folder name an item by id (`src-tauri/src/open.rs`); the app opens it only if it is a supported file inside a chosen folder, or a chat link on claude.ai, chatgpt.com or gemini.google.com. Code and script files open with their Edit action (Notepad unless the person picked an editor), never to run.
 
 ## Motion
 
@@ -142,7 +135,6 @@ One curve (`--ease`), one tempo band (140–260 ms), defined once at the top of 
 `%LOCALAPPDATA%\Recall\`
 - `recall.sqlite` — items, chunks, FTS index, sources, rules, exclusions, cursors, settings
 - `vectors-384.usearch` — HNSW index, keyed by chunk id
-- `bridge.token`
 - `recall.log`: what Recall did, for troubleshooting; starts over past 2 MB
 
 Settings › Data shows sizes; Rebuild index drops items and chunks and re-sweeps, keeping sources, rules and exclusions.
