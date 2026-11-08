@@ -1,4 +1,4 @@
-//! ONNX embedder. Default model: Qwen3-Embedding-0.6B (1024-dim), fetched by
+//! ONNX embedder. The bundled model (bge-small-en-v1.5, 384-dim) is fetched by
 //! `npm run model` into src-tauri/models/. Any sentence-embedding ONNX export with
 //! input_ids/attention_mask works; input and output names are discovered from
 //! the session rather than hardcoded.
