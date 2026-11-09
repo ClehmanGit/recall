@@ -39,14 +39,14 @@ The model is [bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5),
 
 While the model loads, search is keyword-only. Once it has loaded, a background backfill embeds any stored chunk that has no vector yet, a slice at a time behind other work.
 
-## Chat backup
+## Chat sync
 
 Choosing Claude, ChatGPT or Gemini opens a separate window labelled `connect-<platform>` on that app's own website, with `src-tauri/connect/reader.js` injected. The person signs in on the site itself; Recall never handles the password.
 
-The script checks every 3 seconds, for up to ten minutes, whether sign-in has finished, because some sign-ins (a Google pop-up, a typed code) finish without loading a new page. Then the window hides and the backup starts, using the site's own session:
+The script checks every 3 seconds, for up to ten minutes, whether sign-in has finished, because some sign-ins (a Google pop-up, a typed code) finish without loading a new page. Then the window hides and the sync starts, using the site's own session:
 
-- **Quick backup:** recent and starred chats, on sign-in and then every 15 minutes.
-- **Full backup:** older chats, 50 at a time, only after five minutes without keyboard or mouse input or between 1 and 6 am, until every chat is in.
+- **Quick sync:** recent and starred chats, on sign-in and then every 15 minutes.
+- **Full sync:** older chats, 50 at a time, only after five minutes without keyboard or mouse input or between 1 and 6 am, until every chat is in. **Sync all now** in Settings runs full syncs back to back instead, until every chat is in.
 
 The script first asks which chats Recall already has and when each last changed (`connect_known`), so only new or changed chats are fetched. It reports progress for the line under each app in Settings (`connect_progress`), sends batches (`connect_ingest`) and reports the result (`connect_report`). If a site asks Recall to wait longer than 15 seconds, the run stops and that app pauses for 30 minutes. The schedule is at the top of `src-tauri/src/connect.rs`.
 

@@ -37,7 +37,7 @@ function guideHtml(s: Status, standalone: boolean): string {
     </div>`;
 
   const chatBody = `
-    <p>Optional. Sign in to Claude, ChatGPT or Gemini in a window inside Recall, the same way you always do; Recall never sees your password. The window closes by itself, your recent and starred chats are copied first, and older ones follow while the computer is idle or at night.</p>
+    <p>Optional. Sign in to Claude, ChatGPT or Gemini in a window inside Recall, the same way you always do; Recall never sees your password. The window closes by itself, your recent and starred chats sync first, and older ones follow while the computer is idle or at night, or right away with Sync all now in Settings.</p>
     <div class="guide-actions">${chats.map((p) => connected(s, p)
       ? `<span class="guide-chip on"><img src="${assetUrl(PLATFORM_MARK[p])}" alt="" width="16" height="16">${PLATFORM_LABEL[p]}${CHECK}</span>`
       : `<button class="ghost guide-chip" data-guide="connect" data-platform="${p}"><img src="${assetUrl(PLATFORM_MARK[p])}" alt="" width="16" height="16">${PLATFORM_LABEL[p]}</button>`).join("")}

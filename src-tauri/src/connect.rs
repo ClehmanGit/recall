@@ -1,15 +1,16 @@
 //! In-app sign-in for chat apps. Each platform gets its own webview window that
 //! shows the site's own sign-in page. Once signed in, the window is hidden and
-//! kept for backups; `connect/reader.js` runs inside it and hands conversations
+//! kept for syncing; `connect/reader.js` runs inside it and hands conversations
 //! to the commands below. Cookies live in the app's WebView2 profile on this
 //! machine. The window opens on the platform's own site and goes only to
 //! https pages (sign-in can pass through Google, Microsoft or Apple); the
 //! reader's commands work only on the chat sites themselves (capabilities/connect.json).
 //!
-//! Two kinds of backup, both run by the reader:
+//! Two kinds of sync, both run by the reader:
 //! - quick: starred chats and the most recent ones, on sign-in and every fifteen
 //!   minutes, so new chats are searchable within seconds;
-//! - full: everything else, slowly, only while the computer is idle or at night.
+//! - full: everything else, slowly, only while the computer is idle or at night,
+//!   or run after run when the person asks for every chat now (`sync_all`).
 //! Both read only chats Recall does not hold yet or that changed (`connect_known`).
 
 use parking_lot::Mutex;
@@ -22,15 +23,15 @@ use tracing::{debug, info, warn};
 
 const READER: &str = include_str!("../connect/reader.js");
 
-/// Quick backup (starred and recent chats) this often.
+/// Quick sync (starred and recent chats) this often.
 const QUICK_EVERY: Duration = Duration::from_secs(15 * 60);
 /// How often the scheduler looks at the clock and the idle time.
 const TICK: Duration = Duration::from_secs(30);
-/// Keyboard and mouse idle time before a full backup may run.
+/// Keyboard and mouse idle time before a full sync may run.
 const IDLE_FOR_FULL: u64 = 5 * 60;
-/// Chats read per full-backup run; the scheduler starts the next run while still idle.
+/// Chats read per full-sync run; the scheduler starts the next one while still idle, or right away after Sync all now.
 const FULL_RUN: usize = 50;
-/// Hours (local time) when a full backup may run even if the computer is in use.
+/// Hours (local time) when a full sync may run even if the computer is in use.
 const NIGHT: std::ops::Range<u32> = 1..6;
 /// After a site answers 429 (too many requests), wait this long.
 const PAUSE_AFTER_REFUSAL: Duration = Duration::from_secs(30 * 60);
@@ -83,30 +84,33 @@ pub struct Connection {
     pub state: String,
     pub last_sync: Option<String>,
     pub last_error: Option<String>,
-    /// "quick" | "full" while a backup runs
+    /// "quick" | "full" while a sync runs
     #[serde(default)]
     pub pass: Option<String>,
-    /// "listing" | "reading" while a backup runs
+    /// "listing" | "reading" while a sync runs
     #[serde(default)]
     pub stage: Option<String>,
     #[serde(default)]
     pub done: usize,
     #[serde(default)]
     pub todo: usize,
-    /// chats the site lists, from the last backup that read the whole list
+    /// chats the site lists, from the last sync that read the whole list
     #[serde(default)]
     pub total: Option<usize>,
-    /// chats a full backup still has to read
+    /// chats a full sync still has to read
     #[serde(default)]
     pub remaining: Option<usize>,
     #[serde(default)]
     pub last_quick: Option<String>,
-    /// local date (YYYY-MM-DD) of the last full backup that finished
+    /// local date (YYYY-MM-DD) of the last full sync that finished
     #[serde(default)]
     pub full_done_on: Option<String>,
-    /// RFC3339; no backups before this, because the site asked to slow down
+    /// RFC3339; no syncs before this, because the site asked to slow down
     #[serde(default)]
     pub paused_until: Option<String>,
+    /// the person asked for every chat now: full runs back to back, not only when idle
+    #[serde(default)]
+    pub all_now: bool,
 }
 
 fn paused(c: &Connection) -> bool {
@@ -130,24 +134,29 @@ pub fn status_line(platform: &str, c: &Connection) -> String {
     match (c.state.as_str(), c.pass.as_deref(), c.stage.as_deref()) {
         ("never", ..) | ("", ..) => "Not connected".into(),
         ("signing_in", ..) => "Waiting for you to sign in".into(),
-        ("signed_out", ..) => format!("Signed out of {app}. Sign in again to keep backing up."),
+        ("signed_out", ..) => format!("Signed out of {app}. Sign in again to keep syncing."),
         (_, Some(_), Some("listing")) => "Signed in. Getting the list of chats…".into(),
-        (_, Some("quick"), _) => format!("Reading {} of {} recent and starred chats", n(c.done), n(c.todo)),
-        (_, Some("full"), _) => format!("Backing up older chats: {} of {} in this run. Runs while the computer is idle.", n(c.done), n(c.todo)),
+        (_, Some("quick"), _) => format!("Syncing {} of {} recent and starred chats", n(c.done), n(c.todo)),
+        (_, Some("full"), _) if c.all_now => match (c.remaining, c.total) {
+            (Some(r), Some(t)) => format!("Syncing all chats: {} of {} left", n(r), n(t)),
+            _ => format!("Syncing all chats: {} of {} in this run", n(c.done), n(c.todo)),
+        },
+        (_, Some("full"), _) => format!("Syncing older chats: {} of {} in this run. Runs while the computer is idle.", n(c.done), n(c.todo)),
         _ => {
             let mut s = match (c.total, c.remaining) {
                 (Some(0), _) => "Signed in. No saved chats found.".to_string(),
-                (Some(t), Some(0)) => format!("All {} chats backed up", n(t)),
-                (Some(t), Some(r)) => format!("Recent and starred chats backed up. {} of {} older chats left; Recall reads them while the computer is idle or at night.", n(r), n(t)),
-                _ if c.last_sync.is_some() => "Recent and starred chats backed up. Older chats follow while the computer is idle or at night.".to_string(),
+                (Some(t), Some(0)) => format!("All {} chats synced", n(t)),
+                (Some(t), Some(r)) if c.all_now => format!("Recent and starred chats synced. Syncing the other {} of {} now.", n(r), n(t)),
+                (Some(t), Some(r)) => format!("Recent and starred chats synced. {} of {} older chats left; Recall syncs them while the computer is idle or at night.", n(r), n(t)),
+                _ if c.last_sync.is_some() => "Recent and starred chats synced. Older chats follow while the computer is idle or at night.".to_string(),
                 _ => "Connected".to_string(),
             };
             if paused(c) {
                 let until = c.paused_until.as_deref().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
                     .map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string()).unwrap_or_default();
-                s.push_str(&format!(" {app} asked Recall to slow down; the next backup starts after {until}."));
+                s.push_str(&format!(" {app} asked Recall to slow down; the next sync starts after {until}."));
             } else if let Some(e) = &c.last_error {
-                s.push_str(&format!(" Last backup had a problem: {e}"));
+                s.push_str(&format!(" Last sync had a problem: {e}"));
             }
             s
         }
@@ -156,14 +165,14 @@ pub fn status_line(platform: &str, c: &Connection) -> String {
 
 /// Persisted under settings key `connections`; mirrored here for quick reads.
 /// `accepted` holds chats handed to the ingest queue this session that may not
-/// be indexed yet, so a following backup does not read them again.
+/// be indexed yet, so a following sync does not read them again.
 pub struct Connections(pub Mutex<HashMap<String, Connection>>, Mutex<HashMap<String, HashMap<String, String>>>);
 
 impl Connections {
     pub fn load(engine: &Engine) -> Self {
         let mut map: HashMap<String, Connection> = db::setting_get(&engine.db, "connections").ok().flatten().unwrap_or_default();
         for c in map.values_mut() {
-            // a backup or sign-in that was running when Recall closed is over
+            // a sync or sign-in that was running when Recall closed is over
             if c.state == "syncing" || c.state == "signing_in" {
                 c.state = if c.last_sync.is_some() { "connected".into() } else { "never".into() };
             }
@@ -246,13 +255,27 @@ pub async fn connect_platform(app: AppHandle, engine: tauri::State<'_, Engine>, 
     Ok(())
 }
 
-/// Runs a quick backup now in the platform's window, creating it hidden if needed.
+/// Runs a quick sync now in the platform's window, creating it hidden if needed.
 #[tauri::command]
 pub async fn sync_platform(app: AppHandle, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String) -> Result<(), String> {
     valid(&platform)?;
     conns.update(&engine, &platform, |c| c.paused_until = None);
     let w = ensure_window(&app, &platform, false)?;
     w.eval("window.__recall && window.__recall.quick()").map_err(crate::err)
+}
+
+/// Syncs every chat now instead of only while the computer is idle: full runs
+/// follow one another until none are left. A pause the site asked for still holds.
+#[tauri::command]
+pub async fn sync_all(app: AppHandle, engine: tauri::State<'_, Engine>, conns: tauri::State<'_, Connections>, platform: String) -> Result<(), String> {
+    valid(&platform)?;
+    conns.update(&engine, &platform, |c| c.all_now = c.remaining != Some(0));
+    let c = conns.get(&platform);
+    if !c.all_now || c.pass.is_some() || paused(&c) {
+        return Ok(()); // nothing left, or the scheduler starts it once the running sync or the pause ends
+    }
+    let w = ensure_window(&app, &platform, false)?;
+    w.eval(&format!("window.__recall && window.__recall.full({FULL_RUN})")).map_err(crate::err)
 }
 
 /// Closes the window, clears its cookies, and forgets the connection. Indexed
@@ -306,7 +329,7 @@ pub async fn connect_known(window: tauri::WebviewWindow, engine: tauri::State<'_
             known.entry(id.clone()).or_insert_with(|| at.clone());
         }
     }
-    debug!("{platform}: backup asks what is held ({} chats)", known.len());
+    debug!("{platform}: sync asks what is held ({} chats)", known.len());
     Ok(known)
 }
 
@@ -422,8 +445,8 @@ pub async fn connect_progress(window: tauri::WebviewWindow, conns: tauri::State<
     Ok(())
 }
 
-/// The window reports whether the session is signed in and how a backup went.
-/// Signed in: hide the window and keep it for the next backup; if the person just
+/// The window reports whether the session is signed in and how a sync went.
+/// Signed in: hide the window and keep it for the next sync; if the person just
 /// signed in, bring the main window forward so they see what happens next.
 /// Signed out: leave it visible so the person can sign in.
 #[tauri::command]
@@ -467,6 +490,7 @@ pub async fn connect_report(
                 if remaining.is_some() { c.remaining = remaining; }
                 if pass.as_deref() == Some("quick") { c.last_quick = c.last_sync.clone(); }
                 if pass.as_deref() == Some("full") && remaining == Some(0) {
+                    c.all_now = false;
                     c.full_done_on = Some(chrono::Local::now().format("%Y-%m-%d").to_string());
                 }
                 if error.as_deref().is_some_and(|e| e.contains("429")) {
@@ -484,7 +508,7 @@ pub async fn connect_report(
         });
         if let Some(w) = &w {
             // only pop the window if the person asked to connect; a background
-            // backup that finds itself signed out stays quiet and Settings says so
+            // sync that finds itself signed out stays quiet and Settings says so
             if conns.get(&platform).state == "signing_in" { let _ = w.show(); }
         }
     }
@@ -525,8 +549,9 @@ fn needs_full(c: &Connection) -> bool {
     }
 }
 
-/// Every thirty seconds: a quick backup for each connected platform when one is
-/// due, and a full-backup run when the computer is idle or it is night. Runs on
+/// Every thirty seconds: a quick sync for each connected platform when one is
+/// due, and a full-sync run when the computer is idle, it is night, or the
+/// person asked for every chat now. Runs on
 /// its own thread: creating a window from the main thread itself would wait on
 /// the main thread and hang the app on Windows.
 pub fn start_scheduler(app: AppHandle) {
@@ -546,7 +571,7 @@ pub fn start_scheduler(app: AppHandle) {
                     .map_or(true, |t| chrono::Utc::now().signed_duration_since(t).to_std().unwrap_or_default() >= QUICK_EVERY);
                 let script = if quick_due {
                     "window.__recall && window.__recall.quick()".to_string()
-                } else if needs_full(&c) && (idle_secs() >= IDLE_FOR_FULL || night()) {
+                } else if needs_full(&c) && (c.all_now || idle_secs() >= IDLE_FOR_FULL || night()) {
                     format!("window.__recall && window.__recall.full({FULL_RUN})")
                 } else {
                     continue;

@@ -95,7 +95,7 @@ export function renderScope() {
   if (!state.sources.length) { scope.innerHTML = ""; return; }
   const names = state.sources.map(sourceName);
   const label = names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(", ");
-  scope.innerHTML = `<button class="chip scope" title="Search every source">In ${esc(label)}<span aria-hidden="true">✕</span></button>`;
+  scope.innerHTML = `<button class="chip scope" title="Show every source">Only ${esc(label)}<span aria-hidden="true">✕</span></button>`;
 }
 scope.addEventListener("click", () => {
   state.sources = [];

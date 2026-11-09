@@ -131,7 +131,7 @@ async fn exclude_item(app: State<'_, Engine>, item_id: i64) -> Result<Option<db:
 }
 
 /// Undo for exclude: drops the exclusion and, for a file still inside a chosen
-/// folder, reads it again now (a chat returns with the next backup).
+/// folder, reads it again now (a chat returns with the next sync).
 #[tauri::command]
 async fn unexclude(app: State<'_, Engine>, ident: String) -> Result<(), String> {
     let row = db::list_excluded(&app.db).map_err(err)?.into_iter().find(|x| x.ident == ident);
@@ -437,7 +437,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        // closing the window keeps Recall in the tray, so chat backups keep running
+        // closing the window keeps Recall in the tray, so chats keep syncing
         .on_window_event(|w, e| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = e {
                 if w.label() == "main" {
@@ -498,6 +498,7 @@ pub fn run() {
             open::reveal_item,
             connect::connect_platform,
             connect::sync_platform,
+            connect::sync_all,
             connect::disconnect_platform,
             connect::connect_known,
             connect::connect_ingest,

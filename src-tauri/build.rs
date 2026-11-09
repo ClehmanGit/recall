@@ -33,6 +33,7 @@ fn main() {
         "reveal_item",
         "connect_platform",
         "sync_platform",
+        "sync_all",
         "disconnect_platform",
         "connect_known",
         "connect_ingest",

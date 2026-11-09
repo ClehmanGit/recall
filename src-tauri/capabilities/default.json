@@ -36,6 +36,7 @@
     "allow-reveal-item",
     "allow-connect-platform",
     "allow-sync-platform",
+    "allow-sync-all",
     "allow-disconnect-platform",
     "core:default"
   ]

@@ -27,7 +27,7 @@ You add the folders you care about and sign in to the chat apps you use. Recall 
 
 - **Search by meaning, not only exact words.** "the quote for redoing the kitchen" finds *Kitchen remodel quote.pdf* even if the PDF never uses the word "redoing". Exact words and file names work too.
 - **Files and chats in one list.** One result per file or conversation, with its best passages and where they are: page 3, turn 12, line 44.
-- **Stays current.** New and changed files are picked up as you save them. Chats are backed up every 15 minutes while Recall is running.
+- **Stays current.** New and changed files are picked up as you save them. Chats sync every 15 minutes while Recall is running.
 - **Leaves your files alone.** Recall never moves, changes or deletes them.
 
 ## Install
@@ -47,8 +47,8 @@ Get-FileHash .\Recall-Setup.exe -Algorithm SHA256
 Recall opens with a short guide. In brief:
 
 1. **Add folders.** Click **+ Add sources** and pick folders such as Documents or Downloads. Indexing starts right away. The computer works harder until it finishes, and search works the whole time.
-2. **Connect chat apps (optional).** Under **+ Add sources**, pick Claude, ChatGPT or Gemini. A window opens on that app's own website. Sign in as usual, and Recall copies your chats: recent and starred ones first, older ones while the computer is idle.
-3. **Search.** Press <kbd>Ctrl</kbd>+<kbd>K</kbd> from anywhere in Recall and type.
+2. **Connect chat apps (optional).** Under **+ Add sources**, pick Claude, ChatGPT or Gemini. A window opens on that app's own website. Sign in as usual, and Recall syncs your chats: recent and starred ones first, then older ones while the computer is idle. To sync them all right away, click **Sync all now** in **Settings › Chat apps**.
+3. **Search.** Press <kbd>Ctrl</kbd>+<kbd>K</kbd> from anywhere in Recall and type. To see results from only one place, click it under **Filter by source** in the sidebar; click it again to see everything.
 
 Click a result to open the file at the right page, or the chat in your browser. Closing the window keeps Recall running in the system tray so it stays current. To stop it, right-click the tray icon and choose **Quit Recall**.
 
@@ -101,7 +101,7 @@ Recall keeps its index and settings in `%LOCALAPPDATA%\Recall`, and the chat sig
 Recall is a [Tauri 2](https://tauri.app) app: a Rust engine (`core/`) with a TypeScript front end (`src/`). Search combines SQLite full-text search with a small embedding model ([bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)) that runs on your computer.
 
 - [Development](docs/development.md): building, testing and releasing
-- [How Recall works](docs/how-it-works.md): indexing, search, chat backup and the security model
+- [How Recall works](docs/how-it-works.md): indexing, search, chat sync and the security model
 
 ## License
 

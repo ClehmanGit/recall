@@ -10,11 +10,11 @@ let rules: Rules;
 const KINDS: [string, string][] = [["pdf", "PDFs"], ["document", "Word documents"], ["spreadsheet", "Spreadsheets"], ["text", "Text and notes"], ["code", "Code"], ["image", "Images"]];
 const SIZES = [16, 32, 64, 128, 256, 0];
 
-/** The app's own line for a chat app, plus when it last backed up. */
+/** The app's own line for a chat app, plus when it last synced. */
 export function connectionLine(s: Status, p: string): string {
   const c = s.connections[p];
   const line = s.connection_lines?.[p] ?? "Not connected";
-  return c?.state === "connected" && c.last_sync ? `${line} · Last backup ${fmtDate(c.last_sync)}` : line;
+  return c?.state === "connected" && c.last_sync ? `${line} · Last sync ${fmtDate(c.last_sync)}` : line;
 }
 
 function sw(id: string, on: boolean, label: string): string {
@@ -49,8 +49,9 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
             const n = s.platforms.find(([k]) => k === p)?.[1] ?? 0;
             const on = s.platform_enabled[p] !== false;
             const c = s.connections[p] ?? { state: "never", last_sync: null, last_error: null, synced: 0 };
+            const allLeft = c.remaining !== 0 && !c.all_now;
             const action = c.state === "connected" || c.state === "syncing"
-              ? `<button class="mini-btn sync">Back up now</button><button class="mini-btn disconnect">Disconnect</button>`
+              ? `<button class="mini-btn sync">Sync now</button>${allLeft ? `<button class="mini-btn sync-all">Sync all now</button>` : ""}<button class="mini-btn disconnect">Disconnect</button>`
               : c.state === "signed_out" ? `<button class="mini-btn connect">Sign in again</button><button class="mini-btn disconnect">Disconnect</button>`
               : `<button class="mini-btn connect">Connect</button>`;
             return `<div class="row plat-row" data-platform="${p}">
@@ -59,7 +60,7 @@ export async function renderSettings(params: URLSearchParams = new URLSearchPara
               <span class="row-actions">${action}</span>
               <button class="switch ${on ? "on" : ""}" role="switch" aria-checked="${on}" aria-label="Include ${PLATFORM_LABEL[p]}" title="Include in search"><i></i></button></div>`;
           }).join("")}</div>
-          <div class="hint">Connect opens the app's own sign-in page in a window inside Recall. You sign in there, the same way you always do; Recall never sees your password. The window then closes and Recall copies your recent and starred conversations to this computer first, then checks for new ones every fifteen minutes. Older conversations are copied a few at a time while the computer is idle or at night, so they do not slow you down. Nothing is sent anywhere else. Closing the window keeps Recall running in the tray, next to the clock, so this carries on; quit from the tray icon.</div>
+          <div class="hint">Connect opens the app's own sign-in page in a window inside Recall. You sign in there, the same way you always do; Recall never sees your password. The window then closes and Recall syncs your recent and starred conversations to this computer first, then checks for new ones every fifteen minutes. Older conversations sync a few at a time while the computer is idle or at night, so they don't slow you down; Sync all now does them all right away. Nothing is sent anywhere else. Closing the window keeps Recall running in the tray, next to the clock, so this carries on; quit from the tray icon.</div>
         </section>
 
         <section id="s-excluded" class="home-sec">
@@ -166,7 +167,8 @@ function wire(s: Status) {
     const b = $<HTMLButtonElement>(".switch", row);
     b.onclick = async () => { const on = !b.classList.contains("on"); b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); await api.setPlatformEnabled(p, on); };
     row.querySelector<HTMLButtonElement>(".connect")?.addEventListener("click", async () => { await api.connectPlatform(p); toast(`Sign in to ${PLATFORM_LABEL[p]} in the window that opened`); renderSettings(); });
-    row.querySelector<HTMLButtonElement>(".sync")?.addEventListener("click", async () => { await api.syncPlatform(p); toast("Backing up recent and starred chats"); renderSettings(); });
+    row.querySelector<HTMLButtonElement>(".sync")?.addEventListener("click", async () => { await api.syncPlatform(p); toast("Syncing recent and starred chats"); renderSettings(); });
+    row.querySelector<HTMLButtonElement>(".sync-all")?.addEventListener("click", async () => { await api.syncAll(p); toast(`Syncing all ${PLATFORM_LABEL[p]} chats`); renderSettings(); });
     row.querySelector<HTMLButtonElement>(".disconnect")?.addEventListener("click", async () => { if (confirm(`Disconnect ${PLATFORM_LABEL[p]}? Recall signs out of it. Conversations already indexed stay until you hide them or rebuild the index.`)) { await api.disconnectPlatform(p); renderSettings(); } });
   });
   root.querySelectorAll<HTMLElement>("#s-excluded .row[data-ident]").forEach((row) => {

@@ -52,7 +52,7 @@ document.addEventListener("keydown", (e) => {
 
 function sourceRow(id: string, icon: string, name: string, n: number, isNew: boolean): string {
   const off = state.sources.length && !state.sources.includes(id) ? "off" : "";
-  return `<div class="src ${off} ${isNew ? "enter" : ""}" data-source="${esc(id)}" title="${esc(id)}">${icon}<span class="name">${esc(name)}</span><span class="n">${n.toLocaleString()}</span></div>`;
+  return `<div class="src ${off} ${isNew ? "enter" : ""}" data-source="${esc(id)}" title="Show only ${esc(name)}">${icon}<span class="name">${esc(name)}</span><span class="n">${n.toLocaleString()}</span></div>`;
 }
 
 async function refreshStatus() {
@@ -100,7 +100,7 @@ async function refreshStatus() {
   if (guide) renderWelcome(guide, guide.id === "welcome", s);
 
   // chat apps in Settings: redraw when a connection changes state (its buttons
-  // change), otherwise just keep each app's line current while a backup runs
+  // change), otherwise just keep each app's line current while a sync runs
   const states = Object.entries(s.connections).map(([p, c]) => `${p}:${c.state}`).sort().join(",");
   const onSettings = location.hash.startsWith("#settings");
   if (onSettings && chatStates && states !== chatStates) renderSettings();
@@ -116,7 +116,8 @@ async function refreshStatus() {
 if ("__TAURI_INTERNALS__" in window) {
   const { listen } = await import("@tauri-apps/api/event");
   listen<string>("connect-signed-in", (e) => {
-    toast(`Signed in to ${PLATFORM_LABEL[e.payload] ?? e.payload}. Copying your recent and starred chats first; older ones follow while the computer is idle.`);
+    const p = e.payload;
+    toast(`Signed in to ${PLATFORM_LABEL[p] ?? p}. Syncing your recent and starred chats first; older ones follow while the computer is idle.`, { label: "Sync all now", run: () => { api.syncAll(p); } });
     location.hash = "#settings/chats";
   });
 }

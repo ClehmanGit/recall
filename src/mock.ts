@@ -149,6 +149,7 @@ const handlers: Record<string, Handler> = {
   reset_index: () => undefined,
   connect_platform: ({ platform }) => { connections[platform] = { ...connections[platform], state: "signing_in" }; setTimeout(() => { connections[platform] = { state: "connected", last_sync: iso(Date.now()), last_error: null }; }, 2500); },
   sync_platform: ({ platform }) => { connections[platform] = { ...connections[platform], state: "syncing" }; setTimeout(() => { connections[platform] = { state: "connected", last_sync: iso(Date.now()), last_error: null }; }, 1800); },
+  sync_all: ({ platform }) => { connections[platform] = { ...connections[platform], all_now: true }; },
   disconnect_platform: ({ platform }) => { connections[platform] = { state: "never", last_sync: null, last_error: null }; },
   send_feedback: ({ text }) => { console.info("feedback:", text); },
   // app events (sign-in finished): nothing fires in the browser, but listening must not throw

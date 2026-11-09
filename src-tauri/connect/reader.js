@@ -3,13 +3,14 @@
 // with the session that lives in this window, and hands them to the app over the
 // webview's internal channel. Nothing here talks to any other address.
 //
-// Two kinds of backup:
+// Two kinds of sync:
 // - quick: starred or pinned chats and the most recent ones. Runs on sign-in and
 //   on the app's regular sync, so the newest chats are searchable in seconds.
 // - full: everything else, one chat at a time with a pause between, a limited
-//   number per run. The app only starts it while the computer is idle or at night.
+//   number per run. The app starts it while the computer is idle or at night, or
+//   run after run when the person asks for every chat now.
 // Both ask the app which chats it already holds (`connect_known`, id -> updated_at)
-// and read only chats that are new or changed, so a full backup resumes where the
+// and read only chats that are new or changed, so a full sync resumes where the
 // last one stopped.
 (() => {
   if (window.top !== window || window.__recall) return;
@@ -20,10 +21,10 @@
   const platform = host.includes("claude") ? "claude" : host.includes("gemini") ? "gemini" : host.includes("chatgpt") ? "chatgpt" : null;
   if (!platform) return;
 
-  const QUICK_RECENT = 30;   // most recent chats in a quick backup, besides starred ones
-  // chats read at once in a quick backup; ChatGPT refuses parallel reads (429)
+  const QUICK_RECENT = 30;   // most recent chats in a quick sync, besides starred ones
+  // chats read at once in a quick sync; ChatGPT refuses parallel reads (429)
   const QUICK_PARALLEL = { claude: 3, gemini: 3, chatgpt: 1 };
-  // pause between chats in a full backup
+  // pause between chats in a full sync
   const FULL_PAUSE_MS = { claude: 1500, gemini: 1500, chatgpt: 3000 };
   // refusals in a row (429) before a run stops and leaves it for later
   const MAX_REFUSED = 3;
@@ -66,8 +67,8 @@
 
   // Hidden windows: Chromium slows timers in hidden pages and can freeze them
   // after about five minutes, and Tauri cannot turn that off on Windows. A page
-  // holding a Web Lock is not frozen, so each backup runs inside one.
-  // `ifAvailable`: a backup asked for while one runs is skipped, not queued.
+  // holding a Web Lock is not frozen, so each sync runs inside one.
+  // `ifAvailable`: a sync asked for while one runs is skipped, not queued.
   const holdingLock = (fn) => (navigator.locks ? navigator.locks.request(`recall-${platform}`, { ifAvailable: true }, (lock) => (lock ? fn() : null)) : fn());
 
   // ---- claude ----
@@ -145,7 +146,7 @@
       async signedIn() { try { await pageTokens(); return true; } catch { return false; } },
       // stream 1 holds pinned chats, stream 0 the rest; each chat appears once.
       // Row times are creation times: a new message does not move them.
-      // A quick backup lists the pinned chats and the newest 40 only.
+      // A quick sync lists the pinned chats and the newest 40 only.
       async list(quick) {
         const out = [], seen = new Set();
         for (const stream of [1, 0]) {
@@ -200,7 +201,7 @@
     }
     return {
       async signedIn() { try { await bearer(); return true; } catch { return false; } },
-      // newest first; a quick backup lists the first page only. `total` is the
+      // newest first; a quick sync lists the first page only. `total` is the
       // site's own count, so progress can be shown without listing everything.
       async list(quick) {
         const auth = await bearer(); const out = []; let offset = 0;
@@ -235,12 +236,12 @@
 
   const progress = (pass, stage, done, total) => inv("connect_progress", { platform, pass, stage, done, total }).catch(() => {});
 
-  // which chats to read in each kind of backup
+  // which chats to read in each kind of sync
   function choose(kind, list, known) {
     const stale = (c) => !(c.id in known) || (c.updated_at && time(c.updated_at) > time(known[c.id]));
     if (kind === "full") return list.filter(stale);
     // gemini lists newest activity first but its row times do not move, so its
-    // quick backup re-reads the top of the list and drops unchanged chats after
+    // quick sync re-reads the top of the list and drops unchanged chats after
     const recent = platform === "gemini" ? list : [...list].sort((a, b) => time(b.updated_at) - time(a.updated_at));
     const pick = new Map();
     for (const c of list) if (c.starred) pick.set(c.id, c);
@@ -248,7 +249,7 @@
     return [...pick.values()].filter((c) => platform === "gemini" || stale(c));
   }
 
-  async function backup(kind, limit) {
+  async function sync(kind, limit) {
     if (running) return;
     running = kind;
     let sent = 0;
@@ -284,7 +285,7 @@
         if (kind === "full") await sleep(FULL_PAUSE_MS[platform]);
       }
       await flush();
-      // counts only when the whole list was read; a quick backup lists the
+      // counts only when the whole list was read; a quick sync lists the
       // newest page, and the sites' own totals are not reliable (ChatGPT's first
       // page claimed 101 of 2,148). The app keeps the last full count.
       const complete = kind === "full" || platform === "claude";
@@ -296,7 +297,7 @@
       await inv("connect_report", { platform, signedIn: true, synced: sent, error, pass: kind, total, remaining });
     } catch (e) {
       // a network failure (offline, asleep, the site down) says nothing about the
-      // sign-in; reporting it as signed out would stop backups until someone
+      // sign-in; reporting it as signed out would stop syncs until someone
       // clicked Sign in again
       const message = String((e && e.message) || e);
       const offline = !navigator.onLine || (e instanceof TypeError && /fetch|network/i.test(message));
@@ -308,8 +309,8 @@
     }
   }
 
-  const quick = () => holdingLock(() => backup("quick", 200));
-  const full = (limit) => holdingLock(() => backup("full", limit || 100));
+  const quick = () => holdingLock(() => sync("quick", 200));
+  const full = (limit) => holdingLock(() => sync("full", limit || 100));
 
   // Sign-in can finish without a page load: Claude's "Continue with Google"
   // uses a pop-up, and a code typed into the page swaps views in place. So
@@ -325,8 +326,7 @@
     if (looksLeft-- > 0) watch = setTimeout(() => check(true), 3000);
   }
 
-  // `sync` kept so the app's existing calls still work; it runs a quick backup
-  window.__recall = { check, quick, full, sync: quick, busy: () => running };
+  window.__recall = { check, quick, full, busy: () => running };
   // the page may still be loading; the readers only need cookies, so start now
   setTimeout(check, 400);
 })();

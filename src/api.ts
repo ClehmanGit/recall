@@ -21,7 +21,7 @@ export interface Status {
   /** one plain line per chat app, written by the app */
   connection_lines: Record<string, string>;
 }
-export interface Connection { state: "never" | "signing_in" | "connected" | "signed_out" | "syncing"; last_sync: string | null; last_error: string | null }
+export interface Connection { state: "never" | "signing_in" | "connected" | "signed_out" | "syncing"; last_sync: string | null; last_error: string | null; remaining?: number | null; all_now?: boolean }
 export interface Rules {
   skip_dev_folders: boolean; skip_hidden: boolean; skip_packages: boolean; skip_media: boolean;
   skip_code_projects: boolean; skip_textless_images: boolean;
@@ -66,5 +66,6 @@ export const api = {
   sendFeedback: (text: string) => invoke<void>("send_feedback", { text }),
   connectPlatform: (platform: string) => invoke<void>("connect_platform", { platform }),
   syncPlatform: (platform: string) => invoke<void>("sync_platform", { platform }),
+  syncAll: (platform: string) => invoke<void>("sync_all", { platform }),
   disconnectPlatform: (platform: string) => invoke<void>("disconnect_platform", { platform }),
 };
