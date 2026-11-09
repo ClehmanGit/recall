@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased
+## 2.1.3 (November 8, 2026)
 
+- "Continue with Google" and "Continue with Apple" on Claude's sign-in page work. They open a pop-up, which the sign-in window used to block without a word. Pop-ups open only from a sign-in window you can see, and only for Google, Apple or Microsoft sign-in pages or the chat site itself.
 - **Sync all now** in Settings › Chat apps, and on the notice after signing in, syncs every chat right away instead of only while the computer is idle.
 - "Back up" is now "Sync" everywhere in the app.
 - The sidebar's "Sources" heading is now "Filter by source", which is what clicking one does.
-- "Continue with Google" and "Continue with Apple" on Claude's sign-in page work. They open a pop-up, which the sign-in window used to block without a word. Pop-ups open only from a sign-in window you can see, and only for Google, Apple or Microsoft sign-in pages or the chat site itself.
 
 ## 2.1.2 (November 8, 2026)
 
