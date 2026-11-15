@@ -32,7 +32,7 @@ jobs:
       - name: Stamp the style and script links so visitors never get a stale copy
         run: |
           sed -i -E "s#\?v=[^\"]*#?v=${GITHUB_SHA::8}#g" site/index.html
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with: { path: site }
       - id: deploy
